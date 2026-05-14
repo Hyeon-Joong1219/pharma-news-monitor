@@ -1,0 +1,30 @@
+name: Fetch News
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'   # 3시간마다 (UTC 기준 0, 3, 6, 9, 12, 15, 18, 21시)
+  workflow_dispatch:          # 수동 실행 버튼
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch & score news
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python fetch.py

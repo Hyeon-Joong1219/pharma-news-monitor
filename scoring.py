@@ -4,19 +4,14 @@
   - 48시간 내 다수 매체가 같은 이슈를 다루면 source_boost 적용
   - 최종 score = base_score * (1 + 0.5 * (source_count - 1))
 """
-import os
-import sqlite3
 import yaml
 import re
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
+from db import get_db
 
 logger = logging.getLogger(__name__)
-DB_PATH = os.path.join(
-    os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__))),
-    "news.db"
-)
 
 # 클러스터링에서 무시할 영문 불용어
 _EN_STOPWORDS = {
@@ -40,19 +35,6 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def init_db_columns(conn: sqlite3.Connection):
-    for col, typ, default in [
-        ("score",           "REAL",    "0"),
-        ("source_count",    "INTEGER", "1"),
-        ("cluster_id",      "TEXT",    "''"),
-        ("relevance_score", "REAL",    "0"),
-        ("hidden",          "INTEGER", "0"),
-    ]:
-        try:
-            conn.execute(f"ALTER TABLE articles ADD COLUMN {col} {typ} DEFAULT {default}")
-        except sqlite3.OperationalError:
-            pass
-    conn.commit()
 
 
 # ── 키워드 스코어 ────────────────────────────────────────────────
@@ -189,17 +171,15 @@ def run_scoring(days: int = 30):
 
     dedicated_sources = load_dedicated_sources()
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    init_db_columns(conn)
+    conn = get_db()
+    cutoff = datetime.utcnow() - timedelta(days=days)
 
-    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
-    articles = [
-        dict(r) for r in conn.execute(
-            "SELECT id, title, title_ko, summary, source, fetched_at FROM articles WHERE fetched_at >= ?",
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, title, title_ko, summary, source, fetched_at FROM articles WHERE fetched_at >= %s",
             (cutoff,),
-        ).fetchall()
-    ]
+        )
+        articles = [dict(r) for r in cur.fetchall()]
 
     if not articles:
         conn.close()
@@ -239,10 +219,12 @@ def run_scoring(days: int = 30):
                 hidden_cnt += 1
             updates.append((final, source_count, str(root), rel, hidden, a["id"]))
 
-    conn.executemany(
-        "UPDATE articles SET score=?, source_count=?, cluster_id=?, relevance_score=?, hidden=? WHERE id=?",
-        updates,
-    )
+    with conn.cursor() as cur:
+        for row in updates:
+            cur.execute(
+                "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s, hidden=%s WHERE id=%s",
+                row,
+            )
     conn.commit()
     conn.close()
     logger.info(f"스코어링 완료 - hidden 처리: {hidden_cnt}건 (관련성 threshold={threshold})")

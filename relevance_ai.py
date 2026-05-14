@@ -15,18 +15,13 @@ API 키 발급 (무료, 카드 불필요):
 
 import os
 import json
-import sqlite3
 import logging
 import time
 import yaml
-from typing import Optional
+from db import get_db
 
 logger = logging.getLogger(__name__)
 
-DB_PATH      = os.path.join(
-    os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__))),
-    "news.db"
-)
 BATCH_SIZE   = 20
 AI_THRESHOLD = 3   # 이 점수 미만 → hidden
 MODEL        = "llama-3.1-8b-instant"   # Groq 무료 모델
@@ -144,33 +139,28 @@ def run_relevance_classification(days: int = 2, force: bool = False) -> int:
 
     dedicated = _load_dedicated_sources()
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-
     from datetime import datetime, timedelta
-    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    cutoff = datetime.utcnow() - timedelta(days=days)
 
-    try:
-        conn.execute("ALTER TABLE articles ADD COLUMN ai_classified INTEGER DEFAULT 0")
-        conn.commit()
-    except Exception:
-        pass
-
+    conn = get_db()
     cond = "" if force else "AND (ai_classified IS NULL OR ai_classified = 0)"
-    rows = conn.execute(
-        f"SELECT id, title, title_ko, summary, source, lang FROM articles "
-        f"WHERE fetched_at >= ? {cond}",
-        (cutoff,),
-    ).fetchall()
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT id, title, title_ko, summary, source, lang FROM articles "
+            f"WHERE fetched_at >= %s {cond}",
+            (cutoff,),
+        )
+        rows = cur.fetchall()
 
     dedicated_ids = [r["id"] for r in rows if r["source"] in dedicated]
     non_ded = [dict(r) for r in rows if r["source"] not in dedicated]
 
     if dedicated_ids:
-        conn.executemany(
-            "UPDATE articles SET ai_classified=1, hidden=0 WHERE id=?",
-            [(i,) for i in dedicated_ids],
-        )
+        with conn.cursor() as cur:
+            for did in dedicated_ids:
+                cur.execute(
+                    "UPDATE articles SET ai_classified=1, hidden=0 WHERE id=%s", (did,)
+                )
         conn.commit()
 
     if not non_ded:
@@ -184,21 +174,19 @@ def run_relevance_classification(days: int = 2, force: bool = False) -> int:
     for i in range(0, len(non_ded), BATCH_SIZE):
         batch  = non_ded[i: i + BATCH_SIZE]
         scores = _classify_batch(client, batch)
-        updates = []
-        for a in batch:
-            score  = scores.get(a["id"], 5.0)
-            hidden = 1 if score < AI_THRESHOLD else 0
-            if hidden:
-                hidden_cnt += 1
-            updates.append((score * 10, hidden, 1, a["id"]))
-
-        conn.executemany(
-            "UPDATE articles SET relevance_score=?, hidden=?, ai_classified=? WHERE id=?",
-            updates,
-        )
+        with conn.cursor() as cur:
+            for a in batch:
+                score  = scores.get(a["id"], 5.0)
+                hidden = 1 if score < AI_THRESHOLD else 0
+                if hidden:
+                    hidden_cnt += 1
+                cur.execute(
+                    "UPDATE articles SET relevance_score=%s, hidden=%s, ai_classified=%s WHERE id=%s",
+                    (score * 10, hidden, 1, a["id"]),
+                )
         conn.commit()
         logger.info(f"  배치 {i//BATCH_SIZE + 1} 완료 ({len(batch)}건)")
-        time.sleep(2.5)  # Groq 무료 30 RPM 제한 준수 (2초 이상 필요)
+        time.sleep(2.5)
 
     conn.close()
     logger.info(f"AI 분류 완료 - hidden: {hidden_cnt}건 / 전체: {len(non_ded)}건")

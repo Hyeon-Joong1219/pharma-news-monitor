@@ -1,6 +1,5 @@
 import os
 import yaml
-import sqlite3
 import hashlib
 import feedparser
 import datetime
@@ -10,6 +9,7 @@ import re
 import requests
 import urllib3
 from email.utils import parsedate_to_datetime
+from db import get_db, init_db
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -20,8 +20,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(_DATA_DIR, "news.db")
 
 _KO_SOURCES = {
     "히트뉴스", "팜뉴스", "메디파나뉴스", "의약뉴스", "청년의사", "의학신문",
@@ -83,45 +81,6 @@ def normalize_date(raw: str) -> str:
     return ""
 
 
-# ── DB 초기화 / 마이그레이션 ─────────────────────────────────────
-
-def init_db(conn: sqlite3.Connection):
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS articles (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            title        TEXT,
-            link         TEXT,
-            source       TEXT,
-            published    TEXT,
-            published_dt TEXT DEFAULT '',
-            summary      TEXT,
-            keywords     TEXT,
-            hash         TEXT UNIQUE,
-            fetched_at   TEXT,
-            lang         TEXT DEFAULT '',
-            title_ko     TEXT DEFAULT '',
-            summary_ko   TEXT DEFAULT ''
-        )
-    """)
-    for col, default in [("lang", "''"), ("title_ko", "''"), ("summary_ko", "''"),
-                         ("published_dt", "''"), ("hidden", "0")]:
-        try:
-            conn.execute(f"ALTER TABLE articles ADD COLUMN {col} TEXT DEFAULT {default}")
-            logger.info(f"DB 컬럼 추가: {col}")
-        except sqlite3.OperationalError:
-            pass
-
-    # 기존 행 lang 채우기
-    for src in _KO_SOURCES:
-        conn.execute(
-            "UPDATE articles SET lang='ko' WHERE source=? AND (lang IS NULL OR lang='')", (src,)
-        )
-    conn.execute(
-        "UPDATE articles SET lang='en' WHERE (lang IS NULL OR lang='') AND source NOT IN (%s)"
-        % ",".join("?" * len(_KO_SOURCES)),
-        list(_KO_SOURCES),
-    )
-    conn.commit()
 
 
 # ── 설정 로드 ────────────────────────────────────────────────────
@@ -147,9 +106,8 @@ def fetch_feeds():
     feeds, topic_kws, entity_kws = load_config()
     all_kws = topic_kws + entity_kws
 
-    conn = sqlite3.connect(DB_PATH)
-    init_db(conn)
-    c = conn.cursor()
+    init_db()
+    conn = get_db()
 
     total_saved = 0
     results = []
@@ -205,25 +163,33 @@ def fetch_feeds():
                     title_ko   = translate_to_ko(title)
                     summary_ko = translate_to_ko(summary[:500]) if summary else ""
 
+                # published_dt: 파싱 성공 시 datetime, 실패 시 None
+                pub_dt_obj = None
+                if published_dt:
+                    try:
+                        pub_dt_obj = datetime.datetime.fromisoformat(published_dt)
+                    except Exception:
+                        pass
+
                 h = compute_hash(title, link)
-                try:
-                    c.execute(
+                with conn.cursor() as cur:
+                    cur.execute(
                         """INSERT INTO articles
                            (title, link, source, published, published_dt, summary, keywords,
                             hash, fetched_at, lang, title_ko, summary_ko)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           ON CONFLICT (hash) DO NOTHING""",
                         (
-                            title, link, name, published, published_dt,
+                            title, link, name, published, pub_dt_obj,
                             summary[:2000],
                             ", ".join(matched) if matched else "",
                             h,
-                            datetime.datetime.utcnow().isoformat(),
+                            datetime.datetime.utcnow(),
                             lang, title_ko, summary_ko,
                         ),
                     )
-                    saved += 1
-                except sqlite3.IntegrityError:
-                    pass  # 중복
+                    if cur.rowcount:
+                        saved += 1
 
             conn.commit()
             total_saved += saved
