@@ -53,7 +53,8 @@ def _generate_brief(articles: list, lang: str) -> str:
         "- Focus on MARKET IMPLICATIONS, not just news facts\n"
         "- Mention specific company names, drug names, or deal sizes when relevant\n"
         "- Keep each line concise (1-2 sentences max)\n"
-        "- Do NOT include headers or intro/outro text\n\n"
+        "- Do NOT include headers or intro/outro text\n"
+        "- Write in natural, modern Korean — avoid Chinese characters (漢字) or archaic Sino-Korean terms like 里程碑, 契機, 趨勢. Use plain Korean equivalents instead (e.g. 이정표→중요한 발걸음, 계기→기회, 추세→흐름)\n\n"
         "Today's articles:\n" + "\n".join(lines)
     )
     try:
