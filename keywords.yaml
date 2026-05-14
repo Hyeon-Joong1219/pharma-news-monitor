@@ -1,0 +1,168 @@
+# ══════════════════════════════════════════════════════════════════
+# topic_keywords — non-dedicated 피드에서 최소 1개 이상 매칭해야 저장
+#   (제약/바이오에 고유한 용어들. 회사명만으로는 저장 안 됨)
+# ══════════════════════════════════════════════════════════════════
+topic_keywords:
+
+  # 규제 (Regulatory)
+  - FDA
+  - EMA
+  - MFDS
+  - 식약처
+  - NDA
+  - BLA
+  - IND
+  - sBLA
+  - sNDA
+  - 허가
+  - 승인
+  - 가속승인
+  - 우선심사
+  - 패스트트랙
+  - 혁신치료제
+  - breakthrough
+  - orphan
+  - fast track
+  - priority review
+  - accelerated approval
+  - PDUFA
+  - advisory committee
+  - CRL
+  - 완전응답서한
+  - 희귀의약품
+
+  # 임상 (Clinical)
+  - 임상시험
+  - 임상1상
+  - 임상2상
+  - 임상3상
+  - phase 1
+  - phase 2
+  - phase 3
+  - clinical trial
+  - top-line
+  - interim analysis
+  - overall survival
+  - progression-free survival
+  - ORR
+  - adverse event
+  - 부작용
+
+  # 딜/투자 (Deals)
+  - M&A
+  - merger
+  - acquisition
+  - 라이선스
+  - licensing
+  - 기술이전
+  - collaboration
+  - partnership
+  - 공동개발
+  - milestone
+  - IPO
+  - 기업공개
+  - 인수합병
+
+  # 모달리티 (Modality)
+  - ADC
+  - CAR-T
+  - 유전자치료
+  - gene therapy
+  - mRNA
+  - siRNA
+  - 방사성의약품
+  - radiopharmaceutical
+  - bispecific
+  - 이중항체
+  - 세포치료
+  - cell therapy
+  - 바이오시밀러
+  - biosimilar
+  - 항체의약품
+
+# ══════════════════════════════════════════════════════════════════
+# entity_keywords — 기사 태그 표시용
+#   (dedicated 피드에서는 전체 저장, non-dedicated에서는 topic 매칭 후 추가 태그)
+# ══════════════════════════════════════════════════════════════════
+entity_keywords:
+
+  # 글로벌 주요 기업
+  - Pfizer
+  - Merck
+  - MSD
+  - Novartis
+  - Roche
+  - AstraZeneca
+  - BioNTech
+  - Moderna
+  - Sanofi
+  - Bristol-Myers Squibb
+  - BMS
+  - Lilly
+  - AbbVie
+  - Amgen
+  - Gilead
+  - Regeneron
+  - Biogen
+  - Vertex
+  - Novo Nordisk
+  - Genentech
+  - Janssen
+  - GSK
+  - Takeda
+  - Bayer
+  - Astellas
+
+  # 국내 주요 기업 (한국모니터링 메일 빈도 기반 추가)
+  - 셀트리온
+  - 삼성바이오로직스
+  - 삼성바이오에피스
+  - 한미약품
+  - 유한양행
+  - 대웅제약
+  - 대웅바이오
+  - 종근당
+  - GC녹십자
+  - 녹십자
+  - JW중외제약
+  - 에이비엘바이오
+  - SK바이오사이언스
+  - 동아제약
+  - 동아ST
+  - 동아쏘시오
+  - 제넥신
+  - 보령
+  - 휴온스
+  - 알테오젠
+  - 롯데바이오로직스
+  - 이수앱지스
+  - 에이프로젠
+  - 바이넥스
+  - 강스템바이오텍
+  - 일양약품
+  - LG화학
+  - SK플라즈마
+  - 프레스티지바이오
+  - 코오롱제약
+  - 아미코젠
+  - 팬젠
+  - 한국바이오협회
+  - 한국제약바이오협회
+  - 식품의약품안전처
+
+  # 추가 제약/바이오 일반 용어 (태그용)
+  - 항체
+  - antibody
+  - 소분자
+  - small molecule
+  - 임상결과
+  - 생존율
+  - 유효성
+  - 안전성
+  - 톱라인
+  - 제네릭
+  - generic
+  - biologics
+  - 바이오의약품
+  - 신약
+  - drug approval

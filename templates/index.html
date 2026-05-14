@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>제약·바이오 뉴스 모니터</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif; background: #f0f2f5; color: #222; }
+
+/* ── 헤더 ── */
+header { background: linear-gradient(135deg,#0f2d52,#1a4a7a); color:#fff; padding:13px 24px; display:flex; align-items:center; gap:10px; }
+header h1 { font-size:1.18rem; font-weight:700; }
+.badge { background:#27ae60; color:#fff; font-size:.67rem; padding:2px 8px; border-radius:10px; font-weight:700; }
+
+/* ── 탭 ── */
+.lang-tabs { background:#fff; border-bottom:2px solid #e2e7ef; padding:0 24px; display:flex; }
+.lang-tab { padding:11px 20px; border:none; background:none; cursor:pointer; font-size:.92rem; font-weight:600; color:#999; border-bottom:3px solid transparent; margin-bottom:-2px; transition:color .15s,border-color .15s; display:flex; align-items:center; gap:5px; }
+.lang-tab:hover { color:#1a4a7a; }
+.lang-tab.active { color:#1a4a7a; border-bottom-color:#1a4a7a; }
+.tab-count { background:#eef2fb; color:#1a4a7a; font-size:.67rem; padding:1px 7px; border-radius:10px; font-weight:700; }
+.lang-tab.active .tab-count { background:#1a4a7a; color:#fff; }
+
+/* ── 필터바 ── */
+.filter-bar { background:#fff; border-bottom:1px solid #dde2ea; padding:10px 24px; display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+.filter-bar input[type="text"] { flex:1; min-width:180px; padding:7px 12px; border:1px solid #c8cdd6; border-radius:6px; font-size:.86rem; outline:none; }
+.filter-bar input[type="text"]:focus { border-color:#1a4a7a; }
+.filter-bar select { padding:7px 9px; border:1px solid #c8cdd6; border-radius:6px; font-size:.86rem; background:#fff; cursor:pointer; outline:none; }
+.btn-search { padding:7px 18px; background:#1a4a7a; color:#fff; border:none; border-radius:6px; font-size:.86rem; cursor:pointer; font-weight:600; }
+.btn-search:hover { background:#255a96; }
+.btn-reset { padding:7px 13px; background:#e8ecf0; color:#555; border:none; border-radius:6px; font-size:.86rem; cursor:pointer; }
+.btn-reset:hover { background:#d4d9e0; }
+/* 날짜 범위 */
+.date-range { display:none; align-items:center; gap:5px; background:#f0f4ff; border:1px solid #c0ccde; border-radius:6px; padding:4px 10px; }
+.date-range.show { display:flex; }
+.date-range label { font-size:.78rem; color:#555; white-space:nowrap; }
+.date-range input[type="date"] { padding:4px 7px; border:1px solid #c8cdd6; border-radius:5px; font-size:.82rem; outline:none; background:#fff; }
+.date-range input[type="date"]:focus { border-color:#1a4a7a; }
+.date-range span { font-size:.78rem; color:#888; }
+/* 기간 표시 칩 */
+.period-chip { display:inline-flex; align-items:center; gap:4px; background:#1a4a7a; color:#fff; font-size:.73rem; padding:3px 10px; border-radius:12px; font-weight:600; margin-left:4px; }
+.period-chip.custom { background:#7048c5; }
+/* 중요도 순위 뱃지 */
+.rank-badge { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px; border-radius:50%; font-size:.72rem; font-weight:800; margin-right:2px; flex-shrink:0; }
+.rank-1 { background:#e8a020; color:#fff; }
+.rank-2 { background:#888; color:#fff; }
+.rank-3 { background:#b07040; color:#fff; }
+.rank-n { background:#e8ecf4; color:#555; }
+.score-ranked { border-left:3px solid #e8a020; }
+
+/* ── 정렬 토글 ── */
+.sort-bar { background:#f8f9fb; border-bottom:1px solid #e5e9f0; padding:7px 24px; display:flex; align-items:center; gap:8px; }
+.sort-label { font-size:.78rem; color:#888; }
+.sort-btn { padding:4px 14px; border:1px solid #c8cdd6; border-radius:14px; background:#fff; font-size:.78rem; cursor:pointer; color:#555; transition:all .12s; }
+.sort-btn.active { background:#1a4a7a; color:#fff; border-color:#1a4a7a; font-weight:700; }
+
+/* ── 메인 ── */
+main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
+
+/* ── TOP 섹션 ── */
+.top-section { background:#fff; border:1px solid #dde2ea; border-radius:10px; margin-bottom:18px; overflow:hidden; }
+.top-header { padding:11px 18px; display:flex; align-items:center; justify-content:space-between; background:#fafbff; border-bottom:1px solid #edf0f7; cursor:pointer; user-select:none; }
+.top-header h3 { font-size:.92rem; font-weight:700; color:#1a4a7a; display:flex; align-items:center; gap:6px; }
+.top-toggle { font-size:.75rem; color:#aaa; }
+.top-list { padding:6px 0; }
+.top-item { padding:9px 18px; display:flex; align-items:flex-start; gap:10px; border-bottom:1px solid #f2f4f8; transition:background .1s; }
+.top-item:last-child { border-bottom:none; }
+.top-item:hover { background:#f7f9ff; }
+.top-rank { font-size:.8rem; font-weight:800; color:#aaa; min-width:22px; padding-top:2px; }
+.top-rank.r1 { color:#e8a020; }
+.top-rank.r2 { color:#888; }
+.top-rank.r3 { color:#b07040; }
+.top-content { flex:1; min-width:0; }
+.top-title a { font-size:.88rem; font-weight:600; color:#0f2d52; text-decoration:none; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.top-title a:hover { color:#1a4a7a; text-decoration:underline; }
+.top-meta { display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap; }
+.top-source { font-size:.68rem; color:#888; }
+.top-score-icon { font-size:.8rem; }
+.multi-badge { font-size:.67rem; background:#fff3e0; color:#e65100; padding:1px 6px; border-radius:3px; font-weight:700; }
+
+/* ── 결과 정보 ── */
+.result-info { font-size:.8rem; color:#777; margin-bottom:10px; }
+.result-info strong { color:#1a4a7a; font-size:.93rem; }
+
+/* ── 기사 카드 ── */
+.article-list { display:flex; flex-direction:column; gap:9px; }
+.article-card { background:#fff; border:1px solid #dde2ea; border-radius:8px; padding:13px 17px; border-left:3px solid #c8d8f0; transition:box-shadow .15s,border-left-color .15s; }
+.article-card:hover { box-shadow:0 2px 12px rgba(0,0,0,.08); border-left-color:#1a4a7a; }
+.article-card.ko { border-left-color:#f0b429; }
+.article-card.ko:hover { border-left-color:#c07800; }
+
+.article-meta { display:flex; align-items:center; gap:5px; margin-bottom:6px; flex-wrap:wrap; }
+.lang-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.lang-dot.ko { background:#f0b429; } .lang-dot.en { background:#4a90d9; }
+.source-badge { background:#eaf0fb; color:#1a4a7a; font-size:.68rem; padding:2px 7px; border-radius:4px; font-weight:700; }
+.article-card.ko .source-badge { background:#fdf0d0; color:#7a4f00; }
+
+/* 중요도 뱃지 */
+.score-icon { font-size:.8rem; letter-spacing:-1px; }
+.multi-src { font-size:.67rem; background:#fff3e0; color:#e65100; padding:1px 6px; border-radius:3px; font-weight:700; border:1px solid #ffe0b2; }
+
+.article-date { color:#bbb; font-size:.74rem; margin-left:auto; }
+
+.article-title a { font-size:.97rem; font-weight:700; color:#0f2d52; text-decoration:none; line-height:1.45; display:block; }
+.article-title a:hover { color:#1a4a7a; text-decoration:underline; }
+.original-title { margin-top:3px; font-size:.74rem; color:#bbb; font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.article-summary { margin-top:5px; font-size:.83rem; color:#555; line-height:1.6; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+.article-footer { margin-top:7px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.keyword-tags { display:flex; flex-wrap:wrap; gap:3px; flex:1; }
+.kw-tag { background:#f0f4ff; color:#3a5fa0; font-size:.66rem; padding:2px 6px; border-radius:3px; font-weight:500; }
+.article-card.ko .kw-tag { background:#fef8ec; color:#8a5500; }
+.btn-translate { font-size:.7rem; padding:3px 9px; border:1px solid #c0ccde; border-radius:4px; background:#f5f8ff; color:#4a6ea8; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.btn-translate:hover { background:#e2eafc; }
+.btn-translate:disabled { opacity:.5; cursor:default; }
+
+/* ── 시장 브리프 ── */
+.brief-section { background:#fff; border:1px solid #dde2ea; border-radius:10px; margin-bottom:18px; overflow:hidden; }
+.brief-header { padding:11px 18px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,#f0f4ff,#fafbff); border-bottom:1px solid #edf0f7; cursor:pointer; user-select:none; }
+.brief-header-left { display:flex; align-items:center; gap:8px; }
+.brief-header h3 { font-size:.92rem; font-weight:700; color:#1a4a7a; }
+.brief-meta { font-size:.72rem; color:#aaa; }
+.brief-body { padding:16px 20px; line-height:1.85; font-size:.88rem; color:#333; }
+.brief-body p { margin:0; white-space:pre-line; }
+.brief-empty { padding:18px 20px; font-size:.83rem; color:#bbb; text-align:center; }
+.brief-loading { padding:18px 20px; font-size:.83rem; color:#aaa; text-align:center; }
+.brief-footer { padding:8px 20px; border-top:1px solid #f0f2f6; display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+.btn-brief-refresh { font-size:.72rem; padding:3px 11px; border:1px solid #c0ccde; border-radius:12px; background:#f5f8ff; color:#4a6ea8; cursor:pointer; }
+.btn-brief-refresh:hover { background:#e2eafc; }
+.brief-toggle { font-size:.75rem; color:#aaa; }
+
+/* ── 빈/로딩 ── */
+.empty-state { text-align:center; padding:60px 20px; color:#bbb; }
+.empty-state .icon { font-size:2.5rem; margin-bottom:12px; }
+.spinner { display:none; text-align:center; padding:40px; color:#bbb; font-size:.88rem; }
+.spinner.show { display:block; }
+
+/* ── 페이지네이션 ── */
+.pagination { display:flex; justify-content:center; gap:5px; margin-top:22px; }
+.pagination button { padding:6px 12px; border:1px solid #d0d5de; border-radius:5px; background:#fff; cursor:pointer; font-size:.81rem; }
+.pagination button:hover:not(:disabled) { background:#eaf0fb; }
+.pagination button:disabled { opacity:.35; cursor:default; }
+.pagination button.active { background:#1a4a7a; color:#fff; border-color:#1a4a7a; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💊 제약·바이오 뉴스 모니터</h1>
+  <span class="badge">LIVE</span>
+</header>
+
+<!-- 국내/해외 탭 -->
+<div class="lang-tabs">
+  <button class="lang-tab active" data-lang="" onclick="setLang(this)">전체 <span class="tab-count" id="cnt-all">-</span></button>
+  <button class="lang-tab" data-lang="ko" onclick="setLang(this)">🇰🇷 국내 <span class="tab-count" id="cnt-ko">-</span></button>
+  <button class="lang-tab" data-lang="en" onclick="setLang(this)">🌐 해외 <span class="tab-count" id="cnt-en">-</span></button>
+</div>
+
+<!-- 필터바 -->
+<div class="filter-bar">
+  <input type="text" id="searchInput" placeholder="검색어  (예: FDA, 임상3상, Pfizer, ADC, 인수)" />
+  <select id="sourceSelect"><option value="">전체 매체</option>{% for src in sources %}<option value="{{ src }}">{{ src }}</option>{% endfor %}</select>
+  <select id="periodSelect" onchange="onPeriodChange()">
+    <option value="today" selected>오늘</option>
+    <option value="7d">지난 7일</option>
+    <option value="30d">지난 30일</option>
+    <option value="custom">기간 직접 설정</option>
+  </select>
+  <div class="date-range" id="dateRange">
+    <label>시작</label>
+    <input type="date" id="dateFrom" onchange="doSearch(1)" />
+    <span>~</span>
+    <label>종료</label>
+    <input type="date" id="dateTo" onchange="doSearch(1)" />
+  </div>
+  <button class="btn-search" onclick="doSearch(1)">검색</button>
+  <button class="btn-reset" onclick="resetFilters()">초기화</button>
+</div>
+
+<!-- 정렬 토글 -->
+<div class="sort-bar">
+  <span class="sort-label">정렬:</span>
+  <button class="sort-btn active" id="sort-date" onclick="setSort('date',this)">최신순</button>
+  <button class="sort-btn" id="sort-score" onclick="setSort('score',this)">🔥 중요도순</button>
+</div>
+
+<main>
+  <!-- 시장 브리프 -->
+  <div class="brief-section" id="briefSection" style="display:none">
+    <div class="brief-header" onclick="toggleBrief()">
+      <div class="brief-header-left">
+        <h3>📊 오늘의 시장 브리프</h3>
+        <span class="brief-meta" id="briefMeta"></span>
+      </div>
+      <span class="brief-toggle" id="briefToggle">▲</span>
+    </div>
+    <div id="briefContent">
+      <div class="brief-loading" id="briefLoading">분석 중...</div>
+      <div class="brief-body" id="briefBody" style="display:none"><p id="briefText"></p></div>
+      <div class="brief-empty" id="briefEmpty" style="display:none">오늘 기사가 충분하지 않아 브리프를 생성할 수 없습니다.</div>
+    </div>
+    <div class="brief-footer">
+      <button class="btn-brief-refresh" onclick="loadBrief(true)">↻ 재생성</button>
+    </div>
+  </div>
+
+  <div class="result-info" id="resultInfo"></div>
+  <div class="spinner" id="spinner">불러오는 중...</div>
+  <div class="article-list" id="articleList"></div>
+  <div class="pagination" id="pagination"></div>
+</main>
+
+<script>
+let currentPage = 1;
+let currentLang = '';
+let currentSort = 'date';
+let topOpen = true;
+
+// ── 기간 선택 ─────────────────────────────────────
+function onPeriodChange() {
+  const val = document.getElementById('periodSelect').value;
+  const dr  = document.getElementById('dateRange');
+  dr.classList.toggle('show', val === 'custom');
+  if (val === 'custom') {
+    // 날짜 미설정 시 기본값: 7일 전 ~ 오늘
+    const from = document.getElementById('dateFrom');
+    const to   = document.getElementById('dateTo');
+    if (!to.value)   to.value   = todayStr();
+    if (!from.value) from.value = offsetDate(-7);
+    doSearch(1);
+  } else {
+    doSearch(1);
+  }
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function offsetDate(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── 정렬 ──────────────────────────────────────────
+function setSort(sort, btn) {
+  currentSort = sort;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  doSearch(1);
+}
+
+// ── 시장 브리프 ──────────────────────────────────
+let briefOpen = true;
+
+async function loadBrief(refresh) {
+  const sec = document.getElementById('briefSection');
+  sec.style.display = 'block';
+  document.getElementById('briefLoading').style.display = 'block';
+  document.getElementById('briefBody').style.display   = 'none';
+  document.getElementById('briefEmpty').style.display  = 'none';
+
+  const params = new URLSearchParams({ lang: currentLang });
+  if (refresh) params.set('refresh', '1');
+  try {
+    const data = await (await fetch('/api/daily-brief?' + params)).json();
+    document.getElementById('briefLoading').style.display = 'none';
+    if (data.brief) {
+      document.getElementById('briefText').textContent = data.brief;
+      document.getElementById('briefBody').style.display = 'block';
+      document.getElementById('briefMeta').textContent =
+        `기사 ${data.article_count}건 기준 · ${data.generated_at} KST 생성`;
+    } else {
+      document.getElementById('briefEmpty').style.display = 'block';
+    }
+  } catch {
+    document.getElementById('briefLoading').style.display = 'none';
+    document.getElementById('briefEmpty').style.display = 'block';
+  }
+}
+
+function toggleBrief() {
+  briefOpen = !briefOpen;
+  document.getElementById('briefContent').style.display = briefOpen ? '' : 'none';
+  document.getElementById('briefFooter') && (document.getElementById('briefFooter').style.display = briefOpen ? '' : 'none');
+  document.getElementById('briefToggle').textContent = briefOpen ? '▲' : '▼';
+}
+
+// ── 탭 ───────────────────────────────────────────
+function setLang(btn) {
+  document.querySelectorAll('.lang-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  currentLang = btn.dataset.lang;
+  refreshSourceDropdown();
+  doSearch(1);
+  loadBrief(false);
+}
+
+async function refreshSourceDropdown() {
+  const sel = document.getElementById('sourceSelect');
+  const cur = sel.value;
+  try {
+    const url = '/api/sources' + (currentLang ? '?lang=' + currentLang : '');
+    const sources = await (await fetch(url)).json();
+    sel.innerHTML = '<option value="">전체 매체</option>';
+    sources.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      if (s === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  } catch {}
+}
+
+// ── 탭 카운트 ─────────────────────────────────────
+async function loadCounts(base) {
+  const ids = { '':'cnt-all', 'ko':'cnt-ko', 'en':'cnt-en' };
+  await Promise.all(Object.entries(ids).map(async ([lang, id]) => {
+    const p = new URLSearchParams(base);
+    if (lang) p.set('lang', lang); p.set('page', 1);
+    try { document.getElementById(id).textContent = (await (await fetch('/api/articles?'+p)).json()).total.toLocaleString(); } catch {}
+  }));
+}
+
+// ── 검색 ─────────────────────────────────────────
+async function doSearch(page) {
+  currentPage = page || 1;
+  const q        = document.getElementById('searchInput').value.trim();
+  const source   = document.getElementById('sourceSelect').value;
+  const period   = document.getElementById('periodSelect').value;
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo   = document.getElementById('dateTo').value;
+
+  const params = new URLSearchParams({ page: currentPage, sort: currentSort });
+  if (q) params.set('q', q);
+  if (source) params.set('source', source);
+  if (currentLang) params.set('lang', currentLang);
+
+  if (period === 'custom') {
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo)   params.set('date_to',   dateTo);
+  } else if (period) {
+    params.set('period', period);
+  }
+
+  showSpinner(true);
+  try {
+    const [res] = await Promise.all([
+      fetch('/api/articles?' + params),
+      loadCounts(params),
+    ]);
+    renderArticles(await res.json());
+  } catch {
+    document.getElementById('articleList').innerHTML =
+      '<div class="empty-state"><div class="icon">⚠️</div><p>데이터를 불러오지 못했습니다.</p></div>';
+  }
+  showSpinner(false);
+}
+
+// ── 기사 렌더링 ───────────────────────────────────
+function renderArticles(data) {
+  const list  = document.getElementById('articleList');
+  const info  = document.getElementById('resultInfo');
+  const pages = document.getElementById('pagination');
+  const tp    = Math.ceil(data.total / data.per_page);
+
+  const label = periodLabel();
+  const isCustom = document.getElementById('periodSelect').value === 'custom';
+  const chip = label ? `<span class="period-chip ${isCustom?'custom':''}">${label}</span>` : '';
+  const isScoreSort = currentSort === 'score';
+  const pageOffset  = (data.page - 1) * data.per_page;
+
+  info.innerHTML = data.total > 0
+    ? `${chip} 총 <strong>${data.total.toLocaleString()}</strong>개 기사` + (tp > 1 ? ` &nbsp;·&nbsp; ${data.page}/${tp} 페이지` : '')
+      + (isScoreSort ? ' &nbsp;<span style="font-size:.78rem;color:#e8a020;font-weight:600">▼ 중요도순</span>' : '')
+    : `${chip} 조건에 맞는 기사가 없습니다.`;
+
+  if (!data.articles.length) {
+    const period = document.getElementById('periodSelect').value;
+    const hint = period === 'today'
+      ? '<p style="margin-top:8px;font-size:.8rem;color:#bbb">오늘 수집된 기사가 없습니다. 기간을 변경하거나 fetch.py를 실행해 보세요.</p>'
+      : '';
+    list.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>조건에 맞는 기사가 없습니다.</p>${hint}</div>`;
+    pages.innerHTML = ''; return;
+  }
+
+  list.innerHTML = data.articles.map((a, idx) => {
+    const isKo = a.lang === 'ko';
+    const isEn = a.lang === 'en';
+
+    const dispTitle   = (isEn && a.title_ko) ? a.title_ko : a.title;
+    const origTitle   = (isEn && a.title_ko) ? a.title : '';
+    const dispSummary = stripHtml((isEn && a.summary_ko) ? a.summary_ko : (a.summary || ''));
+
+    const date  = formatDate(a.published_dt || a.fetched_at);
+    const icon  = scoreIcon(a.score);
+    const multi = (a.source_count > 1)
+      ? `<span class="multi-src">📰 ${a.source_count}개 매체</span>` : '';
+    const tags  = (a.keywords || '').split(',').filter(k=>k.trim()).slice(0,6)
+      .map(k=>`<span class="kw-tag">${esc(k.trim())}</span>`).join('');
+    const transBtn = (isEn && !a.title_ko)
+      ? `<button class="btn-translate" id="tbtn-${a.id}" onclick="translateCard(${a.id})">🇰🇷 번역</button>` : '';
+
+    const rank = pageOffset + idx + 1;
+    const rankBadge = isScoreSort
+      ? `<span class="rank-badge rank-${rank <= 3 ? rank : 'n'}">${rank}</span>` : '';
+
+    return `
+      <div class="article-card ${isKo?'ko':'en'}${isScoreSort?' score-ranked':''}" id="card-${a.id}">
+        <div class="article-meta">
+          ${rankBadge}
+          <span class="lang-dot ${a.lang||'en'}"></span>
+          <span class="source-badge">${esc(a.source)}</span>
+          ${icon ? `<span class="score-icon">${icon}</span>` : ''}
+          ${multi}
+          <span class="article-date">${date}</span>
+        </div>
+        <div class="article-title">
+          <a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer" id="title-${a.id}">${esc(dispTitle)}</a>
+        </div>
+        ${origTitle ? `<div class="original-title" id="orig-${a.id}">${esc(origTitle)}</div>` : ''}
+        ${dispSummary ? `<div class="article-summary" id="summary-${a.id}">${esc(dispSummary)}</div>` : ''}
+        <div class="article-footer">
+          <div class="keyword-tags">${tags}</div>
+          ${transBtn}
+        </div>
+      </div>`;
+  }).join('');
+
+  renderPagination(data.total, data.page, data.per_page);
+}
+
+// ── 중요도 아이콘 ─────────────────────────────────
+function scoreIcon(score) {
+  if (!score || score <= 0) return '';
+  if (score >= 20) return '🔥🔥🔥';
+  if (score >= 10) return '🔥🔥';
+  if (score >= 4)  return '🔥';
+  return '';
+}
+
+// ── 온디맨드 번역 ─────────────────────────────────
+async function translateCard(id) {
+  const btn = document.getElementById(`tbtn-${id}`);
+  if (!btn) return;
+  btn.disabled = true; btn.textContent = '번역 중…';
+  try {
+    const d = await (await fetch(`/api/translate/${id}`, { method: 'POST' })).json();
+    if (d.title_ko) {
+      const titleEl = document.getElementById(`title-${id}`);
+      if (titleEl) {
+        const orig = titleEl.textContent;
+        titleEl.textContent = d.title_ko;
+        const div = document.createElement('div');
+        div.className = 'original-title'; div.id = `orig-${id}`; div.textContent = orig;
+        titleEl.parentElement.after(div);
+      }
+      const sumEl = document.getElementById(`summary-${id}`);
+      if (sumEl && d.summary_ko) sumEl.textContent = d.summary_ko;
+      btn.remove();
+    } else { btn.textContent = '번역 실패'; }
+  } catch { btn.textContent = '번역 실패'; btn.disabled = false; }
+}
+
+// ── 페이지네이션 ──────────────────────────────────
+function renderPagination(total, page, perPage) {
+  const tp = Math.ceil(total / perPage);
+  const el = document.getElementById('pagination');
+  if (tp <= 1) { el.innerHTML = ''; return; }
+  let html = `<button onclick="doSearch(${page-1})" ${page===1?'disabled':''}>이전</button>`;
+  for (let i=Math.max(1,page-2); i<=Math.min(tp,page+2); i++)
+    html += `<button onclick="doSearch(${i})" class="${i===page?'active':''}">${i}</button>`;
+  html += `<button onclick="doSearch(${page+1})" ${page===tp?'disabled':''}>다음</button>`;
+  el.innerHTML = html;
+}
+
+// ── 유틸 ─────────────────────────────────────────
+function resetFilters() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('sourceSelect').value = '';
+  document.getElementById('periodSelect').value = 'today';
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  document.getElementById('dateRange').classList.remove('show');
+  doSearch(1);
+}
+
+function periodLabel() {
+  const p = document.getElementById('periodSelect').value;
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  if (p === 'today')  return '오늘';
+  if (p === '7d')     return '지난 7일';
+  if (p === '30d')    return '지난 30일';
+  if (p === 'custom') {
+    if (from && to)  return `${from} ~ ${to}`;
+    if (from)        return `${from} 이후`;
+    if (to)          return `${to} 까지`;
+    return '기간 설정';
+  }
+  return '';
+}
+function showSpinner(show) {
+  document.getElementById('spinner').classList.toggle('show', show);
+  document.getElementById('articleList').style.display = show ? 'none' : 'flex';
+}
+function formatDate(str) {
+  if (!str) return '';
+  try {
+    const d = new Date(str);
+    if (isNaN(d)) return str;
+    return d.toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  } catch { return str; }
+}
+function stripHtml(html) { const t=document.createElement('div'); t.innerHTML=html; return (t.textContent||t.innerText||'').trim(); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(1); });
+refreshSourceDropdown();
+doSearch(1);
+loadBrief(false);
+</script>
+</body>
+</html>
