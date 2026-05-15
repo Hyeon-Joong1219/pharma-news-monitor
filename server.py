@@ -155,19 +155,34 @@ def api_articles():
 
     DATE_COL     = "COALESCE(published_dt, fetched_at)"
     where_clause = " WHERE " + " AND ".join(where_parts)
-    order_clause = (f"ORDER BY score DESC, {DATE_COL} DESC" if sort == "score"
-                    else f"ORDER BY {DATE_COL} DESC")
 
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM articles{where_clause}", params)
-            total = cur.fetchone()["count"]
-
-            cur.execute(
-                f"SELECT * FROM articles{where_clause} {order_clause} LIMIT %s OFFSET %s",
-                params + [per_page, (page - 1) * per_page],
-            )
+            if sort == "score":
+                # 중요도순: 같은 cluster_id 중 점수 최고 기사 1개만 표시
+                dedup_sql = (
+                    f"SELECT DISTINCT ON (COALESCE(cluster_id, id::text)) * "
+                    f"FROM articles{where_clause} "
+                    f"ORDER BY COALESCE(cluster_id, id::text), score DESC, {DATE_COL} DESC"
+                )
+                cur.execute(
+                    f"SELECT COUNT(*) FROM ({dedup_sql}) sub", params
+                )
+                total = cur.fetchone()["count"]
+                cur.execute(
+                    f"SELECT * FROM ({dedup_sql}) sub "
+                    f"ORDER BY score DESC, {DATE_COL} DESC LIMIT %s OFFSET %s",
+                    params + params + [per_page, (page - 1) * per_page],
+                )
+            else:
+                cur.execute(f"SELECT COUNT(*) FROM articles{where_clause}", params)
+                total = cur.fetchone()["count"]
+                cur.execute(
+                    f"SELECT * FROM articles{where_clause} "
+                    f"ORDER BY {DATE_COL} DESC LIMIT %s OFFSET %s",
+                    params + [per_page, (page - 1) * per_page],
+                )
             rows = [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
