@@ -173,7 +173,7 @@ def api_articles():
                 cur.execute(
                     f"SELECT * FROM ({dedup_sql}) sub "
                     f"ORDER BY score DESC, {DATE_COL} DESC LIMIT %s OFFSET %s",
-                    params + params + [per_page, (page - 1) * per_page],
+                    params + [per_page, (page - 1) * per_page],
                 )
             else:
                 cur.execute(f"SELECT COUNT(*) FROM articles{where_clause}", params)
