@@ -214,7 +214,11 @@ def run_scoring(days: int = 30):
         for a in grp:
             final   = round(a["base_score"] * multiplier, 2)
             rel     = round(a["relevance_score"], 2)
-            hidden  = 1 if rel < threshold else 0
+            # 전용 매체는 threshold 무관 항상 노출
+            if a["source"] in dedicated_sources:
+                hidden = 0
+            else:
+                hidden = 1 if rel < threshold else 0
             if hidden:
                 hidden_cnt += 1
             updates.append((final, source_count, str(root), rel, hidden, a["id"]))

@@ -130,8 +130,11 @@ def api_articles():
     FRESHNESS = f"({DATE_FILTER} >= NOW() - INTERVAL '3 days')"
 
     if period == "today":
-        # KST 오늘 자정 = UTC 전날 15:00
-        where_parts.append(f"{FA} >= DATE_TRUNC('day', NOW()) - INTERVAL '9 hours'")
+        # 국내(ko): KST 자정 기준 / 해외(en) 또는 전체: rolling 24시간
+        if lang == "ko":
+            where_parts.append(f"{FA} >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'")
+        else:
+            where_parts.append(f"{FA} >= NOW() - INTERVAL '24 hours'")
         where_parts.append(f"({DATE_FILTER} >= NOW() - INTERVAL '2 days')")
     elif period == "24h":
         where_parts.append(f"{FA} >= NOW() - INTERVAL '1 day'")
