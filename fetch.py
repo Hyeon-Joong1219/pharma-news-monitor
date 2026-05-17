@@ -218,10 +218,12 @@ if __name__ == "__main__":
         logger.warning(f"스코어링 실패 (무시): {e}")
 
     # AI 관련성 분류 (비전문 매체 기사 필터링)
+    # --force 플래그가 있으면 이미 분류된 기사도 재분류
+    force_ai = "--force" in sys.argv
     try:
         from relevance_ai import run_relevance_classification
-        logger.info("AI 관련성 분류 시작...")
-        hidden = run_relevance_classification(days=2)
+        logger.info(f"AI 관련성 분류 시작 (force={force_ai})...")
+        hidden = run_relevance_classification(days=7 if force_ai else 2, force=force_ai)
         logger.info(f"AI 관련성 분류 완료 - {hidden}건 필터링")
     except Exception as e:
         logger.warning(f"AI 분류 실패 (무시): {e}")

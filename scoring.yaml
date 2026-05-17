@@ -149,7 +149,7 @@ keyword_weights:
 # ══════════════════════════════════════════════════════════════════
 relevance_weights:
 
-  # ── 제약/바이오 핵심 용어 (강한 양수 신호) ───────────────────────
+  # ── 한국어 제약/바이오 핵심 용어 (강한 양수 신호) ─────────────────
   "의약품":          4
   "제약":            3
   "신약":            5
@@ -160,9 +160,6 @@ relevance_weights:
   "항체":            4
   "바이오의약품":    5
   "바이오시밀러":    5
-  "biosimilar":      5
-  "FDA":             6
-  "EMA":             6
   "식약처":          6
   "MFDS":            6
   "허가":            3
@@ -173,13 +170,58 @@ relevance_weights:
   "안전성":          3
   "CDMO":            5
   "CRO":             4
-  "ADC":             4
-  "CAR-T":           5
-  "mRNA":            4
   "백신":            4
   "항생제":          4
   "진단키트":        4
   "의료기기":        3
+
+  # ── 영어 제약/바이오 핵심 용어 (강한 양수 신호) ──────────────────
+  "FDA":             6
+  "EMA":             6
+  "drug approval":   6
+  "drug approved":   6
+  "clinical trial":  5
+  "phase 3":         5
+  "phase iii":       5
+  "phase 2":         4
+  "phase ii":        4
+  "clinical data":   5
+  "trial results":   5
+  "biotech":         4
+  "biopharma":       4
+  "pharmaceutical":  4
+  "oncology":        4
+  "immunotherapy":   5
+  "biosimilar":      5
+  "ADC":             4
+  "CAR-T":           5
+  "mRNA":            4
+  "gene therapy":    5
+  "cell therapy":    5
+  "antibody":        3
+  "drug":            2
+  "cancer drug":     5
+  "rare disease":    4
+  "orphan drug":     4
+  "NDA":             5
+  "BLA":             5
+  "IND":             4
+  "PDUFA":           5
+  "breakthrough therapy": 6
+  "accelerated approval": 6
+  "priority review": 5
+  "overall survival": 5
+  "progression-free": 4
+  "efficacy":        3
+  "safety data":     4
+  "adverse event":   3
+  "licensing deal":  4
+  "pharma":          3
+  "biologic":        4
+  "pipeline":        3
+  "drug pricing":    4
+  "Medicare":        3
+  "prescription":    3
 
   # ── 국내 제약/바이오 기업 (양수 신호) ────────────────────────────
   "셀트리온":        5
@@ -236,7 +278,7 @@ relevance_weights:
   "Johnson":         3
 
   # ── 비제약 업종 신호 (음수, 하지만 상쇄 가능) ────────────────────
-  # 게임 업계
+  # 게임 업계 (한국어)
   "크래프톤":       -20
   "넥슨":           -20
   "엔씨소프트":     -20
@@ -266,17 +308,54 @@ relevance_weights:
   "재개발":         -15
   "청약":           -12
 
-  # 이차전지·자동차 (바이오배터리 등 제약 연관은 양수 신호가 상쇄)
+  # 이차전지·자동차
   "배터리셀":       -15
   "양극재":         -18
   "음극재":         -18
   "전기차":         -12
 
-  # 엔터·스포츠
+  # 엔터·스포츠 (한국어)
   "K리그":          -15
   "프로야구":       -15
   "프로농구":       -15
   "아이돌":         -12
+
+  # ── 영어 비제약 신호 (음수) ────────────────────────────────────
+  # 암호화폐/금융
+  "cryptocurrency": -20
+  "bitcoin":        -20
+  "crypto":         -18
+  "blockchain":     -15
+  "nft":            -18
+  "ethereum":       -18
+
+  # 지정학·정치 (의약품 정책 관련은 양수 신호가 상쇄)
+  "military":       -15
+  "warfare":        -18
+  "invasion":       -15
+  "missile":        -18
+  "nuclear weapon": -18
+  "taiwan strait":  -15
+  "baby boomer":    -12
+  "primary election": -15
+  "senate race":    -15
+  "gubernatorial":  -15
+
+  # 스포츠·엔터
+  "nfl":            -20
+  "nba":            -20
+  "mlb":            -20
+  "soccer":         -12
+  "championship":   -10
+  "celebrity":      -12
+  "box office":     -15
+
+  # 부동산·에너지
+  "real estate":    -12
+  "mortgage":       -12
+  "solar panel":    -12
+  "electric vehicle": -10
+  "ev battery":     -15
 
 # 전문 제약/바이오 매체 기본 관련성 보너스
 # (히트뉴스, 팜뉴스 등 dedicated 소스는 이 값을 기본 부여)
