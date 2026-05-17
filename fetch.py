@@ -209,23 +209,22 @@ def fetch_feeds():
 if __name__ == "__main__":
     results, total_saved = fetch_feeds()
 
-    # 수집 완료 후 스코어링·클러스터링 실행
-    if total_saved > 0:
-        try:
-            from scoring import run_scoring
-            logger.info("스코어링 시작...")
-            run_scoring()
-        except Exception as e:
-            logger.warning(f"스코어링 실패 (무시): {e}")
+    # 수집 완료 후 스코어링·클러스터링 실행 (신규 기사 유무와 무관하게 항상 실행)
+    try:
+        from scoring import run_scoring
+        logger.info("스코어링 시작...")
+        run_scoring()
+    except Exception as e:
+        logger.warning(f"스코어링 실패 (무시): {e}")
 
-        # AI 관련성 분류 (비전문 매체 기사 필터링)
-        try:
-            from relevance_ai import run_relevance_classification
-            logger.info("AI 관련성 분류 시작...")
-            hidden = run_relevance_classification(days=1)
-            logger.info(f"AI 관련성 분류 완료 - {hidden}건 필터링")
-        except Exception as e:
-            logger.warning(f"AI 분류 실패 (무시): {e}")
+    # AI 관련성 분류 (비전문 매체 기사 필터링)
+    try:
+        from relevance_ai import run_relevance_classification
+        logger.info("AI 관련성 분류 시작...")
+        hidden = run_relevance_classification(days=2)
+        logger.info(f"AI 관련성 분류 완료 - {hidden}건 필터링")
+    except Exception as e:
+        logger.warning(f"AI 분류 실패 (무시): {e}")
 
     ok   = [r for r in results if r["status"] == "ok"]
     fail = [r for r in results if r["status"] == "error"]

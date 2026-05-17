@@ -284,8 +284,9 @@ dedicated_relevance_bonus: 8
 
 # 관련성 최소 임계값: relevance_score < 이 값 → hidden=1
 # 0 = 순수 음수 신호만 있는 기사 차단
-# -5 = 약한 비제약 신호 1개는 허용 (보수적 차단)
-relevance_threshold: 0
+# 3 = 제약/바이오 양수 신호 최소 1개 이상 필요 (권장)
+# 5 = 더 엄격한 필터링
+relevance_threshold: 3
 
 cluster_settings:
   time_window_hours: 48     # 같은 이슈로 묶을 최대 시간 간격
