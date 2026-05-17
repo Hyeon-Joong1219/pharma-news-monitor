@@ -219,13 +219,19 @@ def run_scoring(days: int = 30):
                 hidden_cnt += 1
             updates.append((final, source_count, str(root), rel, hidden, a["id"]))
 
-    with conn.cursor() as cur:
-        for row in updates:
-            cur.execute(
-                "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s, hidden=%s WHERE id=%s",
-                row,
-            )
-    conn.commit()
+    # 100개씩 나눠서 커밋 (Supabase 무료 플랜 타임아웃 방지)
+    BATCH = 100
+    for i in range(0, len(updates), BATCH):
+        batch = updates[i: i + BATCH]
+        with conn.cursor() as cur:
+            for row in batch:
+                cur.execute(
+                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s, hidden=%s WHERE id=%s",
+                    row,
+                )
+        conn.commit()
+        logger.info(f"  스코어링 배치 {i//BATCH + 1} 커밋 ({len(batch)}건)")
+
     conn.close()
     logger.info(f"스코어링 완료 - hidden 처리: {hidden_cnt}건 (관련성 threshold={threshold})")
 
