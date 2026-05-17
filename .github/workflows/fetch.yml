@@ -5,6 +5,10 @@ on:
     - cron: '0 */3 * * *'   # 3시간마다 (UTC 기준 0, 3, 6, 9, 12, 15, 18, 21시)
   workflow_dispatch:          # 수동 실행 버튼
 
+concurrency:
+  group: pharma-db-write    # cleanup.yml과 동일한 그룹 → 동시 실행 방지
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest

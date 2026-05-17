@@ -219,8 +219,9 @@ def run_scoring(days: int = 30):
                 hidden_cnt += 1
             updates.append((final, source_count, str(root), rel, hidden, a["id"]))
 
-    # 100개씩 나눠서 커밋 (Supabase 무료 플랜 타임아웃 방지)
-    BATCH = 100
+    # ID 순 정렬 후 50개씩 커밋 (데드락 방지 + Supabase 타임아웃 방지)
+    updates.sort(key=lambda x: x[-1])   # x[-1] = article id
+    BATCH = 50
     for i in range(0, len(updates), BATCH):
         batch = updates[i: i + BATCH]
         with conn.cursor() as cur:

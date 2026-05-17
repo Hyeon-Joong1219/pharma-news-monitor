@@ -5,6 +5,10 @@ on:
     - cron: '0 15 * * *'   # 매일 KST 자정 (UTC 15:00)
   workflow_dispatch:         # 수동 실행 버튼
 
+concurrency:
+  group: pharma-db-write    # fetch.yml과 동일한 그룹 → 동시 실행 방지
+  cancel-in-progress: false  # 실행 중인 fetch가 끝난 후 cleanup 실행
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
