@@ -78,7 +78,43 @@ feeds:
     lang: en
     dedicated: true
 
-  # ── 글로벌 메이저 경제지 (pharma/biotech 섹션 우선, AI 필터링 적용) ──
+  # ── 해외 제약 전문 출판 (dedicated: true → 키워드 필터 없이 전체 저장) ──
+  - name: PharmaVoice
+    url: https://pharmavoice.com/feed
+    lang: en
+    dedicated: true
+
+  - name: Contract Pharma
+    url: https://contractpharma.com/feed
+    lang: en
+    dedicated: true
+
+  - name: BioWorld
+    url: https://news.google.com/rss/search?q=site%3Abioworld.com%20biotech%20pharma%20drug&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: true
+
+  - name: Pharmacy Times
+    url: https://news.google.com/rss/search?q=site%3Apharmacytimes.com%20drug%20FDA%20approval&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: true
+
+  - name: Clinical Leader
+    url: https://news.google.com/rss/search?q=site%3Aclinicalleader.com%20clinical%20trial%20pharma&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: true
+
+  - name: Healio
+    url: https://news.google.com/rss/search?q=site%3Ahealio.com%20pharma%20drug%20clinical&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: true
+
+  - name: Drug Topics
+    url: https://news.google.com/rss/search?q=site%3Adrugtopics.com%20drug%20pharmacy&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: true
+
+  # ── 글로벌 메이저 경제지 (AI 필터링 적용, 제약/바이오 검색어 제한) ──
   - name: CNBC Health
     url: https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000108
     lang: en
@@ -131,6 +167,11 @@ feeds:
 
   - name: FT
     url: https://news.google.com/rss/search?q=site:ft.com+pharma+biotech&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: false
+
+  - name: The Economist
+    url: https://news.google.com/rss/search?q=site:economist.com+pharma+biotech+healthcare&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: false
 
@@ -660,43 +701,6 @@ feeds:
 
   # ── 자동 추가 (국내) ────────────────────────────────────
 
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: CNBC Health
-    url: https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000108
-    lang: en
-    dedicated: true
-
-  - name: Axios Healthcare
-    url: https://api.axios.com/feed/
-    lang: en
-    dedicated: true
-
-  - name: Forbes Healthcare
-    url: https://news.google.com/rss/search?q=site%3Aforbes.com%20pharma%20biotech%20drug%20FDA%20clinical&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Business Insider Health
-    url: https://news.google.com/rss/search?q=site%3Abusinessinsider.com%20pharma%20biotech%20drug%20FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Barron's Biotech
-    url: https://news.google.com/rss/search?q=site%3Abarrons.com%20biotech%20pharma%20drug%20FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: MarketWatch Pharma
-    url: https://news.google.com/rss/search?q=site%3Amarketwatch.com%20pharma%20biotech%20drug%20FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: The Economist Health
-    url: https://news.google.com/rss/search?q=site%3Aeconomist.com%20pharma%20biotech%20healthcare&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
 
 
   # ── 자동 추가 (국내) ────────────────────────────────────
@@ -736,62 +740,28 @@ feeds:
     dedicated: false
 
 
-  # ── 자동 추가 (해외) ────────────────────────────────────
-  - name: PharmaVoice
-    url: https://pharmavoice.com/feed
-    lang: en
-    dedicated: false
-
-  - name: Pharmacy Times
-    url: https://news.google.com/rss/search?q=site%3Apharmacytimes.com%20drug%20FDA%20approval&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Drug Topics
-    url: https://news.google.com/rss/search?q=site%3Adrugtopics.com%20drug%20pharmacy&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Clinical Leader
-    url: https://news.google.com/rss/search?q=site%3Aclinicalleader.com%20clinical%20trial%20pharma&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
 
 
   # ── 자동 추가 (국내) ────────────────────────────────────
 
   # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 블로터닷넷
-    url: https://www.bloter.net/rss/allArticle.xml
-    lang: ko
-    dedicated: false
 
-  - name: 뉴스드림
-    url: https://www.newsdream.kr/rss/allArticle.xml
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+  - name: IT조선
+    url: https://it.chosun.com/rss/allArticle.xml
     lang: ko
     dedicated: false
 
 
   # ── 자동 추가 (해외) ────────────────────────────────────
-  - name: Healio
-    url: https://news.google.com/rss/search?q=site%3Ahealio.com%20pharma%20drug%20clinical&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Contract Pharma
-    url: https://contractpharma.com/feed
-    lang: en
-    dedicated: false
-
-  - name: BioWorld
-    url: https://news.google.com/rss/search?q=site%3Abioworld.com%20biotech%20pharma%20drug&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
   - name: PM360
     url: https://pm360online.com/feed
     lang: en
-    dedicated: false
+    dedicated: true
 
   - name: Managed Healthcare
     url: https://news.google.com/rss/search?q=site%3Amanagedhealthcareexecutive.com%20healthcare%20pharma&hl=en-US&gl=US&ceid=US:en
