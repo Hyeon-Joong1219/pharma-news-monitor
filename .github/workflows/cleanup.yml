@@ -1,12 +1,12 @@
-name: Fetch News
+name: Daily Cleanup
 
 on:
   schedule:
-    - cron: '0 */3 * * *'   # 3시간마다 (UTC 기준 0, 3, 6, 9, 12, 15, 18, 21시)
-  workflow_dispatch:          # 수동 실행 버튼
+    - cron: '0 15 * * *'   # 매일 KST 자정 (UTC 15:00)
+  workflow_dispatch:         # 수동 실행 버튼
 
 jobs:
-  fetch:
+  cleanup:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -23,8 +23,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Fetch & score news
+      - name: Re-score all recent articles
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python fetch.py
+        run: python scoring.py 30
+
+      - name: Re-classify relevance (force, 7 days)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python relevance_ai.py 7 --force
