@@ -130,10 +130,10 @@ def api_articles():
     FRESHNESS = f"({DATE_FILTER} >= NOW() - INTERVAL '3 days')"
 
     if period == "today":
-        # 발행일(published_dt) 기준 24시간 — fetched_at 아님
-        # (해외 기사는 이전 수집분도 오늘 발행이면 노출)
-        where_parts.append(f"{DATE_FILTER} >= NOW() - INTERVAL '24 hours'")
-        where_parts.append(f"{FA} >= NOW() - INTERVAL '7 days'")   # 너무 오래된 기사 제외
+        # 오늘 수집(fetched_at)된 기사 중 최근 3일 내 발행된 것
+        # → 해외 소스는 오늘 RSS에서 처음 수집돼도 published_dt가 2~3일 전일 수 있음
+        where_parts.append(f"{FA} >= NOW() - INTERVAL '24 hours'")
+        where_parts.append(f"({DATE_FILTER} >= NOW() - INTERVAL '3 days')")
     elif period == "24h":
         where_parts.append(f"{FA} >= NOW() - INTERVAL '1 day'")
         where_parts.append(FRESHNESS)
