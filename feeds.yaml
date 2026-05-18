@@ -269,7 +269,12 @@ feeds:
   - name: 더바이오
     url: https://www.thebionews.net/rss/allArticle.xml
     lang: ko
-    dedicated: false
+    dedicated: true
+
+  - name: 더바이오 종양학
+    url: https://cdn.thebionews.net/rss/gns_S1N1.xml
+    lang: ko
+    dedicated: true
 
   - name: 데일리메디
     url: https://news.google.com/rss/search?q=site:dailymedi.com+%EB%8D%B0%EC%9D%BC%EB%A6%AC%EB%A9%94%EB%94%94%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
@@ -751,20 +756,60 @@ feeds:
   # ── 자동 추가 (국내) ────────────────────────────────────
 
   # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: IT조선
-    url: https://it.chosun.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
   - name: PM360
     url: https://pm360online.com/feed
     lang: en
     dedicated: true
 
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+  - name: The Economist Health
+    url: https://news.google.com/rss/search?q=site%3Aeconomist.com%20pharma%20biotech%20healthcare&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: true
+
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+  - name: 블로터닷넷
+    url: https://www.bloter.net/rss/allArticle.xml
+    lang: ko
+    dedicated: false
+
+  - name: 뉴스드림
+    url: https://www.newsdream.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: false
+
+
+  # ── 자동 추가 (해외) ────────────────────────────────────
   - name: Managed Healthcare
     url: https://news.google.com/rss/search?q=site%3Amanagedhealthcareexecutive.com%20healthcare%20pharma&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: false
+
+  - name: Science Daily
+    url: https://news.google.com/rss/search?q=site%3Asciencedaily.com%20drug%20clinical%20trial%20FDA&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: false
+
+  - name: The BMJ
+    url: https://news.google.com/rss/search?q=site%3Abmj.com%20drug%20clinical%20trial&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: false
+
+  - name: The Lancet
+    url: https://news.google.com/rss/search?q=site%3Athelancet.com%20drug%20clinical%20trial&hl=en-US&gl=US&ceid=US:en
+    lang: en
+    dedicated: false
+
+  - name: Applied Clinical Trials
+    url: https://news.google.com/rss/search?q=site%3Aappliedclinicaltrialsonline.com%20clinical%20trial&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: false
 
