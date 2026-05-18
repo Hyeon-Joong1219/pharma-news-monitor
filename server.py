@@ -297,6 +297,52 @@ def api_daily_brief():
     return jsonify({k: v for k, v in payload.items() if k != "ts"})
 
 
+@app.route("/api/debug/overseas")
+def api_debug_overseas():
+    """진단용: 해외 기사 현황 (hidden 포함 전체)"""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            # 시간대별 분포
+            cur.execute("""
+                SELECT
+                    COUNT(*) FILTER (WHERE COALESCE(published_dt, fetched_at) >= NOW() - INTERVAL '24 hours') AS today_all,
+                    COUNT(*) FILTER (WHERE COALESCE(published_dt, fetched_at) >= NOW() - INTERVAL '24 hours'
+                                     AND (hidden IS NULL OR hidden = 0)) AS today_visible,
+                    COUNT(*) FILTER (WHERE COALESCE(published_dt, fetched_at) >= NOW() - INTERVAL '24 hours'
+                                     AND hidden = 1) AS today_hidden,
+                    COUNT(*) FILTER (WHERE fetched_at >= NOW() - INTERVAL '24 hours') AS fetched_today,
+                    COUNT(*) FILTER (WHERE fetched_at >= NOW() - INTERVAL '7 days') AS fetched_7d,
+                    COUNT(*) FILTER (WHERE published_dt IS NULL) AS no_pub_dt,
+                    COUNT(*) AS total_en
+                FROM articles WHERE lang = 'en'
+            """)
+            summary = dict(cur.fetchone())
+
+            # 소스별 오늘 기사 수 (hidden 포함)
+            cur.execute("""
+                SELECT source,
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE hidden IS NULL OR hidden = 0) AS visible,
+                    COUNT(*) FILTER (WHERE hidden = 1) AS hidden_cnt,
+                    MAX(COALESCE(published_dt, fetched_at)) AS latest
+                FROM articles
+                WHERE lang = 'en'
+                  AND COALESCE(published_dt, fetched_at) >= NOW() - INTERVAL '48 hours'
+                GROUP BY source
+                ORDER BY total DESC
+            """)
+            by_source = []
+            for r in cur.fetchall():
+                row = dict(r)
+                if isinstance(row.get("latest"), datetime.datetime):
+                    row["latest"] = row["latest"].isoformat()
+                by_source.append(row)
+    finally:
+        conn.close()
+    return jsonify({"summary": summary, "by_source_48h": by_source})
+
+
 @app.route("/api/sources")
 def api_sources():
     lang = request.args.get("lang", "").strip()
