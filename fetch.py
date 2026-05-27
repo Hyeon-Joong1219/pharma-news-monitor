@@ -142,7 +142,10 @@ def fetch_feeds():
                     matched_t   = match_keywords(body, topic_kws)
                     matched_e   = match_keywords(body, entity_kws)
                     matched     = matched_t + matched_e
-                    should_save = len(matched_t) > 0
+                    # 모니터링 메일 알고리즘 반영:
+                    # topic_keyword OR 주요 제약기업명(entity_keyword) → 저장
+                    # (기업명만 있어도 저장, AI 필터가 비제약 내용 차단)
+                    should_save = len(matched_t) > 0 or len(matched_e) > 0
 
                 if not should_save:
                     continue
