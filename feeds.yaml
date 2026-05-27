@@ -255,6 +255,37 @@ feeds:
     lang: ko
     dedicated: false
 
+  # ── 모니터링 메일 고빈도 출처 추가 (한국 주요 경제지, 키워드 필터) ──
+  - name: 이데일리
+    url: https://news.google.com/rss/search?q=site:edaily.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 머니투데이
+    url: https://news.google.com/rss/search?q=site:mt.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 조선비즈
+    url: https://news.google.com/rss/search?q=site:biz.chosun.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 서울경제
+    url: https://news.google.com/rss/search?q=site:sedaily.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 헤럴드경제
+    url: https://news.google.com/rss/search?q=site:heraldcorp.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 한국경제
+    url: https://news.google.com/rss/search?q=site:hankyung.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
   # ── 자동 추가 (국내) ────────────────────────────────────
   - name: 뉴시스 헬스
     url: https://news.google.com/rss/search?q=site:newsis.com+%EB%89%B4%EC%8B%9C%EC%8A%A4%20%ED%97%AC%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
@@ -482,11 +513,6 @@ feeds:
 
   - name: 프레스맨
     url: https://www.pressman.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 세계일보
-    url: https://news.google.com/rss/search?q=site:segye.com+%EC%84%B8%EA%B3%84%EC%9D%BC%EB%B3%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
     lang: ko
     dedicated: false
 
@@ -776,16 +802,59 @@ feeds:
   # ── 자동 추가 (국내) ────────────────────────────────────
 
   # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 블로터닷넷
-    url: https://www.bloter.net/rss/allArticle.xml
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+  - name: IT조선
+    url: https://it.chosun.com/rss/allArticle.xml
     lang: ko
     dedicated: false
 
-  - name: 뉴스드림
-    url: https://www.newsdream.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
 
+  # ── 자동 추가 (해외) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (해외) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (해외) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (해외) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (해외) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
 
   # ── 자동 추가 (해외) ────────────────────────────────────
   - name: Managed Healthcare
