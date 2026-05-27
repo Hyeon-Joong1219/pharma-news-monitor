@@ -281,6 +281,21 @@ feeds:
     lang: ko
     dedicated: false
 
+  - name: 더벨
+    url: https://news.google.com/rss/search?q=site:thebell.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 이투데이
+    url: https://news.google.com/rss/search?q=site:etoday.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 매일경제
+    url: https://news.google.com/rss/search?q=site:mk.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
   - name: 한국경제
     url: https://news.google.com/rss/search?q=site:hankyung.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
     lang: ko
@@ -855,6 +870,25 @@ feeds:
   # ── 자동 추가 (해외) ────────────────────────────────────
 
   # ── 자동 추가 (국내) ────────────────────────────────────
+
+  # ── 자동 추가 (해외) ────────────────────────────────────
+
+  # ── 자동 추가 (국내) ────────────────────────────────────
+  - name: 세계일보
+    url: https://news.google.com/rss/search?q=site%3Asegye.com%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 블로터닷넷
+    url: https://www.bloter.net/rss/allArticle.xml
+    lang: ko
+    dedicated: false
+
+  - name: 뉴스드림
+    url: https://www.newsdream.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: false
+
 
   # ── 자동 추가 (해외) ────────────────────────────────────
   - name: Managed Healthcare
