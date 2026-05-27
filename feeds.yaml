@@ -18,7 +18,7 @@ feeds:
     dedicated: true
 
   - name: Endpoints News
-    url: https://endpts.com/feed/
+    url: https://news.google.com/rss/search?q=site:endpts.com+biotech+pharma+FDA&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: true
 
@@ -80,7 +80,7 @@ feeds:
 
   # ── 해외 제약 전문 출판 (dedicated: true → 키워드 필터 없이 전체 저장) ──
   - name: PharmaVoice
-    url: https://pharmavoice.com/feed
+    url: https://news.google.com/rss/search?q=site:pharmavoice.com+pharma+biotech&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: true
 

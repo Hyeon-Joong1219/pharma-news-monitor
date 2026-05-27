@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE   = 20
 AI_THRESHOLD = 4   # 이 점수 미만 → hidden (3→4로 상향: 비제약 기사 차단 강화)
-MODEL        = "llama-3.3-70b-versatile"   # 한국어 이해력 강화 모델
+# llama-3.1-8b-instant: ~500 tokens/batch → 무료 100k TPD 내에서 200배치(4,000건) 처리 가능
+# llama-3.3-70b-versatile: ~33,000 tokens/batch → 무료 TPD 3배치만에 소진됨 (사용 금지)
+MODEL        = "llama-3.1-8b-instant"
 
 
 def _load_api_key() -> str:
