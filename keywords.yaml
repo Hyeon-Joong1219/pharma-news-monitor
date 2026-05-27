@@ -48,20 +48,20 @@ topic_keywords:
   - adverse event
   - 부작용
 
-  # 딜/투자 (Deals)
-  - M&A
-  - merger
-  - acquisition
-  - 라이선스
-  - licensing
+  # 딜/투자 (Deals) — 제약/바이오 맥락에서만 저장되도록 구체화
   - 기술이전
-  - collaboration
-  - partnership
-  - 공동개발
-  - milestone
-  - IPO
-  - 기업공개
-  - 인수합병
+  - 라이선스 계약
+  - licensing deal
+  - license agreement
+  - 공동개발 계약
+  - milestone payment
+  - 바이오 M&A
+  - 제약 인수
+  - pharma acquisition
+  - biotech merger
+  - pharma IPO
+  - biotech IPO
+  - 바이오 기업공개
 
   # 모달리티 (Modality)
   - ADC

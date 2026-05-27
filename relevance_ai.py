@@ -23,8 +23,8 @@ from db import get_db
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE   = 20
-AI_THRESHOLD = 3   # 이 점수 미만 → hidden
-MODEL        = "llama-3.1-8b-instant"   # Groq 무료 모델
+AI_THRESHOLD = 4   # 이 점수 미만 → hidden (3→4로 상향: 비제약 기사 차단 강화)
+MODEL        = "llama-3.3-70b-versatile"   # 한국어 이해력 강화 모델
 
 
 def _load_api_key() -> str:
@@ -85,24 +85,40 @@ def _classify_batch(client, articles: list) -> dict:
         lines.append(f'{i+1}. [{a["source"]}] {title_str} | {summary[:150]}')
 
     prompt = (
-        "You are evaluating news articles for a pharmaceutical/biotech industry monitoring system.\n"
-        "Rate each article's relevance to pharma/biotech/healthcare on a scale of 0-10.\n\n"
+        "You are a strict filter for a Korean pharmaceutical/biotech industry news monitoring system.\n"
+        "Rate each article's relevance to pharma/biotech/life sciences on a scale of 0-10.\n\n"
         "Scoring guide:\n"
-        "  10 : Clinical trial results, FDA/EMA/MFDS approvals, new drug development, "
-        "biosimilar launches, pharma company M&A or licensing deals\n"
-        "   7 : Pharma/biotech company investments, IPO, healthcare policy, medical devices\n"
-        "   4 : General health/medical information loosely related to pharma\n"
-        "   1 : Gaming, real estate, automotive, EV batteries, entertainment, "
-        "finance unrelated to pharma, energy sector\n"
-        "   0 : Completely unrelated to pharma/biotech\n\n"
-        "Key rules:\n"
-        "- M&A/IPO of a pharma or biotech company -> high score (7-10)\n"
-        "- M&A/IPO of a gaming, energy, or real estate company -> low score (0-2)\n"
-        "- Articles in Korean or English are both valid - judge by content, not language\n\n"
+        "  9-10: FDA/EMA/식약처 approval, clinical trial results (phase 1-3), new drug launch,\n"
+        "         biosimilar/ADC/CAR-T/gene therapy news, pharma company M&A or licensing deal\n"
+        "   7-8: Pharma/biotech company earnings, IPO, pipeline update, healthcare policy\n"
+        "         directly affecting drugs, medical device approval\n"
+        "   5-6: General biotech investment, hospital/insurance news with pharma angle,\n"
+        "         scientific research with clear drug development implication\n"
+        "   3-4: Loosely health-related but minimal pharma relevance\n"
+        "   0-2: NON-PHARMA — must score 0-2 if the article is primarily about:\n"
+        "         supermarkets (홈플러스/이마트/코스트코), shipbuilding (STX/현대중공업/조선소),\n"
+        "         semiconductors (SK하이닉스/삼성전자), automobiles (현대차/기아/GM),\n"
+        "         steel (포스코/현대제철), telecom (SKT/KT/LG유플러스),\n"
+        "         gaming (크래프톤/넥슨/NC소프트), crypto/finance/real estate,\n"
+        "         entertainment, sports, politics, or general economy unrelated to pharma\n\n"
+        "CRITICAL RULES:\n"
+        "- Judge by the MAIN SUBJECT of the article, not just keywords\n"
+        "- M&A of a PHARMA/BIOTECH company → 8-10  |  M&A of a retailer/shipper → 0-1\n"
+        "- A conglomerate article (e.g. SK, 롯데, 삼성) with no pharma division angle → 0-2\n"
+        "- Korean and English articles equally valid — judge by content only\n"
+        "- When in doubt about a Korean company, ask: is their PRIMARY business pharma/biotech?\n\n"
+        "Examples:\n"
+        "  '홈플러스 인수합병 추진' → 0 (supermarket, not pharma)\n"
+        "  'STX 조선 합병' → 0 (shipbuilding)\n"
+        "  'SK하이닉스 반도체 투자' → 0 (semiconductor)\n"
+        "  '삼성바이오로직스 임상 결과' → 10 (pharma)\n"
+        "  '한미약품 기술이전 계약' → 10 (pharma licensing)\n"
+        "  'FDA approves Pfizer cancer drug' → 10\n"
+        "  '연합뉴스 경기 침체 우려' → 0 (general economy)\n\n"
         "Articles:\n"
         + "\n".join(lines)
         + "\n\n"
-        "Reply with a JSON array ONLY (no explanation): "
+        "Reply with a JSON array ONLY (no explanation, no markdown): "
         '[{"id":1,"score":8},{"id":2,"score":2},...]'
     )
 
