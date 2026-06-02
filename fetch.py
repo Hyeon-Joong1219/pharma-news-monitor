@@ -160,11 +160,11 @@ def fetch_feeds():
                     except Exception:
                         pass
 
-                # 영문 기사 → 번역
+                # 영문 기사 → 번역 (요약 최대 800자)
                 title_ko = summary_ko = ""
                 if lang == "en":
                     title_ko   = translate_to_ko(title)
-                    summary_ko = translate_to_ko(summary[:500]) if summary else ""
+                    summary_ko = translate_to_ko(summary[:800]) if summary else ""
 
                 # published_dt: 파싱 성공 시 datetime, 실패 시 None
                 pub_dt_obj = None

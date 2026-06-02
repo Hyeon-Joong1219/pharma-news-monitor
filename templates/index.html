@@ -113,6 +113,11 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 .btn-translate { font-size:.7rem; padding:3px 9px; border:1px solid #c0ccde; border-radius:4px; background:#f5f8ff; color:#4a6ea8; cursor:pointer; white-space:nowrap; flex-shrink:0; }
 .btn-translate:hover { background:#e2eafc; }
 .btn-translate:disabled { opacity:.5; cursor:default; }
+.btn-ai-summary { font-size:.7rem; padding:3px 9px; border:1px solid #b8d4b8; border-radius:4px; background:#f0faf0; color:#2a7a3a; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.btn-ai-summary:hover { background:#d8f0d8; }
+.btn-ai-summary:disabled { opacity:.5; cursor:default; }
+.ai-summary-box { margin-top:6px; padding:8px 11px; background:#f5fbf5; border-left:3px solid #4caf50; border-radius:4px; font-size:.82rem; color:#2a5a2a; line-height:1.65; }
+.ai-summary-label { font-size:.65rem; color:#5a9a5a; font-weight:700; margin-bottom:3px; }
 
 /* ── 시장 브리프 ── */
 .brief-section { background:#fff; border:1px solid #dde2ea; border-radius:10px; margin-bottom:18px; overflow:hidden; }
@@ -402,6 +407,8 @@ function renderArticles(data) {
       .map(k=>`<span class="kw-tag">${esc(k.trim())}</span>`).join('');
     const transBtn = (isEn && !a.title_ko)
       ? `<button class="btn-translate" id="tbtn-${a.id}" onclick="translateCard(${a.id})">🇰🇷 번역</button>` : '';
+    const aiBtn = isEn
+      ? `<button class="btn-ai-summary" id="aibtn-${a.id}" onclick="aiSummary(${a.id})">🤖 AI 요약</button>` : '';
 
     const rank = pageOffset + idx + 1;
     const rankBadge = isScoreSort
@@ -425,7 +432,9 @@ function renderArticles(data) {
         <div class="article-footer">
           <div class="keyword-tags">${tags}</div>
           ${transBtn}
+          ${aiBtn}
         </div>
+        <div id="ai-box-${a.id}" style="display:none"></div>
       </div>`;
   }).join('');
 
@@ -462,6 +471,30 @@ async function translateCard(id) {
       btn.remove();
     } else { btn.textContent = '번역 실패'; }
   } catch { btn.textContent = '번역 실패'; btn.disabled = false; }
+}
+
+// ── AI 한국어 요약 ────────────────────────────────
+async function aiSummary(id) {
+  const btn = document.getElementById(`aibtn-${id}`);
+  const box = document.getElementById(`ai-box-${id}`);
+  if (!btn || !box) return;
+  btn.disabled = true; btn.textContent = '요약 생성 중…';
+  box.style.display = 'none';
+  try {
+    const d = await (await fetch(`/api/ai-summary/${id}`, { method: 'POST' })).json();
+    if (d.summary_ko) {
+      const text = d.summary_ko.replace(/^【AI】/, '');
+      box.innerHTML = `<div class="ai-summary-box"><div class="ai-summary-label">🤖 AI 한국어 요약 ${d.cached ? '(캐시)' : ''}</div>${esc(text)}</div>`;
+      box.style.display = 'block';
+      btn.textContent = '🤖 AI 요약 ✓';
+    } else {
+      btn.textContent = '요약 실패';
+      btn.disabled = false;
+    }
+  } catch {
+    btn.textContent = '요약 실패';
+    btn.disabled = false;
+  }
 }
 
 // ── 페이지네이션 ──────────────────────────────────

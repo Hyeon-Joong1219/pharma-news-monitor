@@ -258,6 +258,70 @@ def translate_article(article_id):
     return jsonify({"title_ko": title_ko, "summary_ko": summary_ko})
 
 
+@app.route("/api/ai-summary/<int:article_id>", methods=["POST"])
+def ai_summary(article_id):
+    """영어 기사를 Groq 8b로 한국어 AI 요약 생성 (캐시 우선)."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, title, summary, summary_ko, lang FROM articles WHERE id = %s",
+                (article_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        if row["lang"] != "en":
+            return jsonify({"error": "only for English articles"}), 400
+
+        # 이미 AI 요약이 존재하고 충분히 길면 캐시 반환
+        existing = (row["summary_ko"] or "").strip()
+        if len(existing) > 120 and existing.startswith("【AI】"):
+            return jsonify({"summary_ko": existing, "cached": True})
+
+        api_key = _load_groq_key()
+        if not api_key:
+            return jsonify({"error": "GROQ_API_KEY not set"}), 503
+
+        try:
+            from groq import Groq
+        except ImportError:
+            return jsonify({"error": "groq package not installed"}), 503
+
+        title   = (row["title"] or "")[:300]
+        summary = (row["summary"] or "")[:1200]
+        prompt  = (
+            "You are a pharmaceutical/biotech industry analyst writing for a Korean-speaking audience.\n"
+            "Summarize the following English article in Korean in 2-3 concise sentences.\n"
+            "Focus on: drug/therapy name, company, key clinical data (e.g., OS improvement, ORR), "
+            "regulatory status (FDA approval/CRL/IND), deal size, or market implication.\n"
+            "Avoid vague language. Use specific numbers and names when available.\n"
+            "Write in natural, modern Korean. No honorifics (반말/존댓말 모두 불필요). No intro phrase.\n\n"
+            f"Title: {title}\n"
+            f"Content: {summary}\n\n"
+            "Korean summary (2-3 sentences only):"
+        )
+        try:
+            client = Groq(api_key=api_key)
+            resp   = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=350,
+                temperature=0.15,
+            )
+            ko = "【AI】" + resp.choices[0].message.content.strip()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE articles SET summary_ko = %s WHERE id = %s", (ko, article_id)
+                )
+            conn.commit()
+            return jsonify({"summary_ko": ko, "cached": False})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/daily-brief")
 def api_daily_brief():
     lang    = request.args.get("lang", "").strip()
