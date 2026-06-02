@@ -407,6 +407,53 @@ def api_debug_overseas():
     return jsonify({"summary": summary, "by_source_48h": by_source})
 
 
+_fetch_state = {"running": False, "last_run": None, "last_saved": None, "last_error": None}
+
+
+@app.route("/api/fetch-status")
+def api_fetch_status():
+    return jsonify(_fetch_state)
+
+
+@app.route("/api/trigger-fetch", methods=["POST"])
+def api_trigger_fetch():
+    """수동으로 뉴스 수집 + 스코어링 + AI 분류를 백그라운드 실행."""
+    if _fetch_state["running"]:
+        return jsonify({"status": "already_running"}), 409
+
+    def _run():
+        _fetch_state["running"]    = True
+        _fetch_state["last_error"] = None
+        try:
+            os.chdir(os.path.dirname(os.path.abspath(__file__)))
+            from fetch import fetch_feeds
+            _, saved = fetch_feeds()
+            _fetch_state["last_saved"] = saved
+
+            try:
+                from scoring import run_scoring
+                run_scoring()
+            except Exception as e:
+                _logging.warning(f"[Trigger] 스코어링 실패: {e}")
+
+            try:
+                from relevance_ai import run_relevance_classification
+                run_relevance_classification(days=2)
+            except Exception as e:
+                _logging.warning(f"[Trigger] AI 분류 실패: {e}")
+
+            now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M KST")
+            _fetch_state["last_run"] = now_kst
+        except Exception as e:
+            _fetch_state["last_error"] = str(e)
+            _logging.error(f"[Trigger] 수집 실패: {e}")
+        finally:
+            _fetch_state["running"] = False
+
+    threading.Thread(target=_run, daemon=True, name="manual-fetch").start()
+    return jsonify({"status": "started"})
+
+
 @app.route("/api/sources")
 def api_sources():
     lang = request.args.get("lang", "").strip()
@@ -441,6 +488,23 @@ def _scheduler_loop():
             from fetch import fetch_feeds
             _, saved = fetch_feeds()
             _sched_logger.info(f"[Scheduler] 수집 완료: {saved}건")
+
+            try:
+                from scoring import run_scoring
+                run_scoring()
+                _sched_logger.info("[Scheduler] 스코어링 완료")
+            except Exception as e:
+                _sched_logger.warning(f"[Scheduler] 스코어링 실패: {e}")
+
+            try:
+                from relevance_ai import run_relevance_classification
+                hidden = run_relevance_classification(days=2)
+                _sched_logger.info(f"[Scheduler] AI 분류 완료 - {hidden}건 필터링")
+            except Exception as e:
+                _sched_logger.warning(f"[Scheduler] AI 분류 실패: {e}")
+
+            now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M KST")
+            _fetch_state.update({"last_run": now_kst, "last_saved": saved, "running": False, "last_error": None})
         except Exception as e:
             _sched_logger.error(f"[Scheduler] 수집 실패: {e}")
         time.sleep(3 * 3600)

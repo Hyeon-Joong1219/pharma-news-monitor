@@ -153,6 +153,10 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 <header>
   <h1>💊 제약·바이오 뉴스 모니터</h1>
   <span class="badge">LIVE</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <span id="fetchStatus" style="font-size:.72rem;color:rgba(255,255,255,.6);"></span>
+    <button id="btnFetch" onclick="triggerFetch()" style="font-size:.75rem;padding:5px 13px;border:1px solid rgba(255,255,255,.4);border-radius:6px;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;white-space:nowrap;">🔄 새 기사 가져오기</button>
+  </div>
 </header>
 
 <!-- 국내/해외 탭 -->
@@ -291,6 +295,57 @@ function toggleBrief() {
   document.getElementById('briefContent').style.display = briefOpen ? '' : 'none';
   document.getElementById('briefFooter') && (document.getElementById('briefFooter').style.display = briefOpen ? '' : 'none');
   document.getElementById('briefToggle').textContent = briefOpen ? '▲' : '▼';
+}
+
+// ── 수동 Fetch 트리거 ─────────────────────────────
+let _fetchPollTimer = null;
+
+async function triggerFetch() {
+  const btn = document.getElementById('btnFetch');
+  const status = document.getElementById('fetchStatus');
+  btn.disabled = true; btn.textContent = '⏳ 수집 중…';
+  status.textContent = '';
+  try {
+    const r = await fetch('/api/trigger-fetch', { method: 'POST' });
+    const d = await r.json();
+    if (r.status === 409) {
+      status.textContent = '이미 실행 중';
+      btn.disabled = false; btn.textContent = '🔄 새 기사 가져오기';
+      return;
+    }
+    // 완료될 때까지 폴링
+    _fetchPollTimer = setInterval(async () => {
+      try {
+        const s = await (await fetch('/api/fetch-status')).json();
+        if (!s.running) {
+          clearInterval(_fetchPollTimer);
+          btn.disabled = false; btn.textContent = '🔄 새 기사 가져오기';
+          if (s.last_error) {
+            status.textContent = '❌ 오류: ' + s.last_error.slice(0, 60);
+          } else {
+            status.textContent = `✅ ${s.last_saved ?? 0}건 저장 · ${s.last_run ?? ''}`;
+            doSearch(1);   // 목록 자동 새로고침
+          }
+        }
+      } catch {}
+    }, 4000);
+  } catch {
+    btn.disabled = false; btn.textContent = '🔄 새 기사 가져오기';
+    status.textContent = '❌ 요청 실패';
+  }
+}
+
+async function loadFetchStatus() {
+  try {
+    const s = await (await fetch('/api/fetch-status')).json();
+    const status = document.getElementById('fetchStatus');
+    if (s.running) {
+      status.textContent = '⏳ 수집 중…';
+      document.getElementById('btnFetch').disabled = true;
+    } else if (s.last_run) {
+      status.textContent = `마지막 수집: ${s.last_run}`;
+    }
+  } catch {}
 }
 
 // ── 탭 ───────────────────────────────────────────
@@ -554,6 +609,7 @@ document.getElementById('searchInput').addEventListener('keydown', e => { if (e.
 refreshSourceDropdown();
 doSearch(1);
 loadBrief(false);
+loadFetchStatus();
 </script>
 </body>
 </html>
