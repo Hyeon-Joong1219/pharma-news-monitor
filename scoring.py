@@ -62,12 +62,24 @@ def compute_relevance_score(text: str, source: str,
 
 # ── 클러스터링 유틸 ──────────────────────────────────────────────
 
+_KO_RE = re.compile(r'[가-힣]')
+
 def significant_words(text: str, min_len: int = 4) -> set:
-    """제목에서 의미있는 단어 집합 추출."""
+    """제목에서 의미있는 단어 집합 추출.
+    한국어 토큰은 2자 이상, 영문 토큰은 min_len 이상으로 처리."""
     if not text:
         return set()
     tokens = re.split(r'[\s,.\-_:;!?/|&()\[\]"\'·]+', text.lower())
-    return {t for t in tokens if len(t) >= min_len and t not in STOPWORDS}
+    result = set()
+    for t in tokens:
+        if t in STOPWORDS:
+            continue
+        if _KO_RE.search(t):
+            if len(t) >= 2:
+                result.add(t)
+        elif len(t) >= min_len:
+            result.add(t)
+    return result
 
 
 class UnionFind:
@@ -90,8 +102,9 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
     단어 역색인(inverted index)으로 O(n·k) 수준으로 처리.
     """
     window_sec  = cfg.get("time_window_hours", 48) * 3600
-    min_shared  = cfg.get("min_shared_words", 3)
-    min_len     = cfg.get("min_word_length", 4)
+    min_shared  = cfg.get("min_shared_words", 4)
+    min_ratio   = cfg.get("min_overlap_ratio", 0.4)
+    min_len     = cfg.get("min_word_length", 2)
 
     # 기사별 메타 준비
     meta = {}
@@ -132,7 +145,10 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
                 continue
             if abs((m["time"] - cm["time"]).total_seconds()) > window_sec:
                 continue
-            if len(m["words"] & cm["words"]) >= min_shared:
+            shared = len(m["words"] & cm["words"])
+            # 공유 단어 수 + 비율(짧은 쪽 대비) 둘 다 만족해야 클러스터
+            shorter = min(len(m["words"]), len(cm["words"]))
+            if shorter > 0 and shared >= min_shared and shared / shorter >= min_ratio:
                 uf.union(aid, cid)
 
     id_map = {a["id"]: a for a in articles}
@@ -156,6 +172,22 @@ def load_dedicated_sources() -> set:
         return set()
 
 
+_DECAY_FACTOR = 0.02   # 24h → 68%, 48h → 54%, 7d → 24%
+
+
+def _time_decay(ref_dt) -> float:
+    """발행일(또는 수집일) 기준 시간 감쇠 계수 반환 (0 < decay ≤ 1)."""
+    if ref_dt is None:
+        return 1.0
+    if isinstance(ref_dt, str):
+        try:
+            ref_dt = datetime.fromisoformat(ref_dt)
+        except Exception:
+            return 1.0
+    age_hours = max(0.0, (datetime.utcnow() - ref_dt).total_seconds() / 3600)
+    return 1.0 / (1.0 + _DECAY_FACTOR * age_hours)
+
+
 def run_scoring(days: int = 30):
     """
     최근 `days`일 기사를 스코어링·클러스터링·관련성 평가.
@@ -176,7 +208,7 @@ def run_scoring(days: int = 30):
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, title, title_ko, summary, source, fetched_at FROM articles WHERE fetched_at >= %s",
+            "SELECT id, title, title_ko, summary, source, fetched_at, published_dt, ai_classified FROM articles WHERE fetched_at >= %s",
             (cutoff,),
         )
         articles = [dict(r) for r in cur.fetchall()]
@@ -205,29 +237,55 @@ def run_scoring(days: int = 30):
         logger.info(f"  [{len(grp)}개 매체] {grp[0]['title'][:60]}  →  {sources}")
 
     # 3단계: 최종 점수 계산 & hidden 판정 & DB 업데이트
-    updates = []
+    # ai_classified=1 인 기사: score/cluster만 갱신 — AI가 결정한 hidden 보존
+    # ai_classified=0 인 기사: score/cluster + hidden 모두 갱신 (AI 분류 전 임시 필터)
+    updates_score_only = []   # (score, source_count, cluster_id, relevance_score, id)
+    updates_full       = []   # (score, source_count, cluster_id, relevance_score, hidden, id)
     hidden_cnt = 0
+
     for root, grp in clusters.items():
         sources      = {a["source"] for a in grp}
         source_count = len(sources)
         multiplier   = 1 + boost * (source_count - 1)
+        # 멀티소스 기사: base_score가 0이라도 최소 1점 보장 (곱셈 부스트 효과)
+        multi_floor  = 1.0 if source_count >= 2 else 0.0
         for a in grp:
-            final   = round(a["base_score"] * multiplier, 2)
-            rel     = round(a["relevance_score"], 2)
-            # 전용 매체는 threshold 무관 항상 노출
-            if a["source"] in dedicated_sources:
-                hidden = 0
+            ref_dt = a.get("published_dt") or a.get("fetched_at")
+            decay  = _time_decay(ref_dt)
+            raw    = max(a["base_score"], multi_floor)
+            final  = round(raw * multiplier * decay, 2)
+            rel    = round(a["relevance_score"], 2)
+
+            if a.get("ai_classified"):
+                # AI가 이미 분류 — hidden 건드리지 않음
+                updates_score_only.append((final, source_count, str(root), rel, a["id"]))
             else:
-                hidden = 1 if rel < threshold else 0
-            if hidden:
-                hidden_cnt += 1
-            updates.append((final, source_count, str(root), rel, hidden, a["id"]))
+                # AI 미분류 — 키워드 기반 임시 필터 적용
+                if a["source"] in dedicated_sources:
+                    hidden = 0
+                else:
+                    hidden = 1 if rel < threshold else 0
+                if hidden:
+                    hidden_cnt += 1
+                updates_full.append((final, source_count, str(root), rel, hidden, a["id"]))
 
     # ID 순 정렬 후 50개씩 커밋 (데드락 방지 + Supabase 타임아웃 방지)
-    updates.sort(key=lambda x: x[-1])   # x[-1] = article id
     BATCH = 50
-    for i in range(0, len(updates), BATCH):
-        batch = updates[i: i + BATCH]
+
+    updates_score_only.sort(key=lambda x: x[-1])
+    for i in range(0, len(updates_score_only), BATCH):
+        batch = updates_score_only[i: i + BATCH]
+        with conn.cursor() as cur:
+            for row in batch:
+                cur.execute(
+                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s WHERE id=%s",
+                    row,
+                )
+        conn.commit()
+
+    updates_full.sort(key=lambda x: x[-1])
+    for i in range(0, len(updates_full), BATCH):
+        batch = updates_full[i: i + BATCH]
         with conn.cursor() as cur:
             for row in batch:
                 cur.execute(
@@ -238,7 +296,11 @@ def run_scoring(days: int = 30):
         logger.info(f"  스코어링 배치 {i//BATCH + 1} 커밋 ({len(batch)}건)")
 
     conn.close()
-    logger.info(f"스코어링 완료 - hidden 처리: {hidden_cnt}건 (관련성 threshold={threshold})")
+    total_scored = len(updates_score_only) + len(updates_full)
+    logger.info(
+        f"스코어링 완료 - 전체 {total_scored}건 "
+        f"(AI분류유지 {len(updates_score_only)}건 / 임시필터 hidden {hidden_cnt}건)"
+    )
 
 
 if __name__ == "__main__":

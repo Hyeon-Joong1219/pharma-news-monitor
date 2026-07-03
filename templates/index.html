@@ -119,6 +119,23 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 .ai-summary-box { margin-top:6px; padding:8px 11px; background:#f5fbf5; border-left:3px solid #4caf50; border-radius:4px; font-size:.82rem; color:#2a5a2a; line-height:1.65; }
 .ai-summary-label { font-size:.65rem; color:#5a9a5a; font-weight:700; margin-bottom:3px; }
 
+/* ── 읽음 표시 ── */
+.article-card.read { opacity:.5; }
+.article-card.read .article-title a { color:#888; }
+.read-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#27ae60; flex-shrink:0; margin-top:3px; title:"읽음"; }
+
+/* ── 클러스터 뷰 ── */
+.btn-cluster { font-size:.7rem; padding:3px 9px; border:1px solid #c0d4f0; border-radius:4px; background:#eef4ff; color:#2a5aa8; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.btn-cluster:hover { background:#d8e8ff; }
+.cluster-panel { margin-top:8px; border-top:1px dashed #d0daea; padding-top:8px; }
+.cluster-panel-title { font-size:.72rem; color:#888; margin-bottom:6px; font-weight:600; }
+.cluster-item { display:flex; align-items:flex-start; gap:8px; padding:5px 0; border-bottom:1px solid #f0f2f6; }
+.cluster-item:last-child { border-bottom:none; }
+.cluster-item-source { font-size:.68rem; background:#eaf0fb; color:#1a4a7a; padding:2px 6px; border-radius:4px; font-weight:700; flex-shrink:0; }
+.cluster-item-title { font-size:.84rem; color:#0f2d52; text-decoration:none; font-weight:600; line-height:1.4; flex:1; }
+.cluster-item-title:hover { color:#1a4a7a; text-decoration:underline; }
+.cluster-item-date { font-size:.7rem; color:#bbb; white-space:nowrap; }
+
 /* ── 시장 브리프 ── */
 .brief-section { background:#fff; border:1px solid #dde2ea; border-radius:10px; margin-bottom:18px; overflow:hidden; }
 .brief-header { padding:11px 18px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,#f0f4ff,#fafbff); border-bottom:1px solid #edf0f7; cursor:pointer; user-select:none; }
@@ -464,15 +481,21 @@ function renderArticles(data) {
       ? `<button class="btn-translate" id="tbtn-${a.id}" onclick="translateCard(${a.id})">🇰🇷 번역</button>` : '';
     const aiBtn = isEn
       ? `<button class="btn-ai-summary" id="aibtn-${a.id}" onclick="aiSummary(${a.id})">🤖 AI 요약</button>` : '';
+    const clusterBtn = (a.source_count > 1 && a.cluster_id)
+      ? `<button class="btn-cluster" id="cbtn-${a.id}" onclick="toggleCluster(${a.id},'${esc(a.cluster_id)}')">📰 관련 ${a.source_count}개 매체 ▼</button>` : '';
 
     const rank = pageOffset + idx + 1;
     const rankBadge = isScoreSort
       ? `<span class="rank-badge rank-${rank <= 3 ? rank : 'n'}">${rank}</span>` : '';
 
+    const readClass = isRead(a.id) ? ' read' : '';
+    const readDot   = isRead(a.id) ? '<span class="read-dot" title="읽음"></span>' : '';
+
     return `
-      <div class="article-card ${isKo?'ko':'en'}${isScoreSort?' score-ranked':''}" id="card-${a.id}">
+      <div class="article-card ${isKo?'ko':'en'}${isScoreSort?' score-ranked':''}${readClass}" id="card-${a.id}">
         <div class="article-meta">
           ${rankBadge}
+          ${readDot}
           <span class="lang-dot ${a.lang||'en'}"></span>
           <span class="source-badge">${esc(a.source)}</span>
           ${icon ? `<span class="score-icon">${icon}</span>` : ''}
@@ -480,16 +503,19 @@ function renderArticles(data) {
           <span class="article-date">${date}</span>
         </div>
         <div class="article-title">
-          <a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer" id="title-${a.id}">${esc(dispTitle)}</a>
+          <a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer" id="title-${a.id}"
+             onclick="markAsRead(${a.id})">${esc(dispTitle)}</a>
         </div>
         ${origTitle ? `<div class="original-title" id="orig-${a.id}">${esc(origTitle)}</div>` : ''}
         ${dispSummary ? `<div class="article-summary" id="summary-${a.id}">${esc(dispSummary)}</div>` : ''}
         <div class="article-footer">
           <div class="keyword-tags">${tags}</div>
+          ${clusterBtn}
           ${transBtn}
           ${aiBtn}
         </div>
         <div id="ai-box-${a.id}" style="display:none"></div>
+        <div id="cluster-panel-${a.id}" class="cluster-panel" style="display:none"></div>
       </div>`;
   }).join('');
 
@@ -604,6 +630,74 @@ function formatDate(str) {
 }
 function stripHtml(html) { const t=document.createElement('div'); t.innerHTML=html; return (t.textContent||t.innerText||'').trim(); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ── 읽음 표시 (localStorage) ──────────────────────────
+const _READ_KEY = 'pharma_read_v1';
+
+function getReadIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(_READ_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function markAsRead(id) {
+  const ids = getReadIds();
+  ids.add(String(id));
+  const arr = [...ids].slice(-1000);   // 최대 1000개 보관
+  localStorage.setItem(_READ_KEY, JSON.stringify(arr));
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.classList.add('read');
+}
+
+function isRead(id) { return getReadIds().has(String(id)); }
+
+// ── 클러스터 뷰 ───────────────────────────────────────
+const _clusterOpen = {};
+
+async function toggleCluster(articleId, clusterId) {
+  const panel = document.getElementById(`cluster-panel-${articleId}`);
+  const btn   = document.getElementById(`cbtn-${articleId}`);
+  if (!panel) return;
+
+  if (_clusterOpen[articleId]) {
+    panel.style.display = 'none';
+    _clusterOpen[articleId] = false;
+    btn.textContent = btn.textContent.replace('▲', '▼');
+    return;
+  }
+
+  // 아직 로드 안 됐으면 fetch
+  if (!panel.dataset.loaded) {
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="cluster-panel-title">불러오는 중…</div>';
+    try {
+      const articles = await (await fetch(`/api/cluster/${encodeURIComponent(clusterId)}`)).json();
+      if (!articles.length) {
+        panel.innerHTML = '';
+        panel.style.display = 'none';
+        return;
+      }
+      const items = articles.map(a => {
+        const title = (a.lang === 'en' && a.title_ko) ? a.title_ko : a.title;
+        const date  = formatDate(a.published_dt || a.fetched_at);
+        return `<div class="cluster-item">
+          <span class="cluster-item-source">${esc(a.source)}</span>
+          <a class="cluster-item-title" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer"
+             onclick="markAsRead(${a.id})">${esc(title)}</a>
+          <span class="cluster-item-date">${date}</span>
+        </div>`;
+      }).join('');
+      panel.innerHTML = `<div class="cluster-panel-title">같은 이슈를 다룬 ${articles.length}개 매체</div>${items}`;
+      panel.dataset.loaded = '1';
+    } catch {
+      panel.innerHTML = '<div class="cluster-panel-title" style="color:#c00">불러오기 실패</div>';
+    }
+  } else {
+    panel.style.display = 'block';
+  }
+
+  _clusterOpen[articleId] = true;
+  if (btn) btn.textContent = btn.textContent.replace('▼', '▲');
+}
 
 document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(1); });
 refreshSourceDropdown();

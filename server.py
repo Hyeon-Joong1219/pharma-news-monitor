@@ -157,15 +157,24 @@ def api_articles():
     DATE_COL     = "COALESCE(published_dt, fetched_at)"
     where_clause = " WHERE " + " AND ".join(where_parts)
 
+    # 중요도순 정렬: AI 분류 완료 기사는 AI관련성×키워드점수 복합 지표 사용
+    # ai_classified=1: relevance_score(0-100) × score / 100  → AI가 낮게 평가한 기사 하위
+    # ai_classified=0: score 그대로 (AI 분류 전 임시)
+    _EFF_SCORE = (
+        "CASE WHEN ai_classified=1 "
+        "THEN (COALESCE(relevance_score,50)*COALESCE(score,0)/100.0) "
+        "ELSE COALESCE(score,0) END"
+    )
+
     conn = get_db()
     try:
         with conn.cursor() as cur:
             if sort == "score":
-                # 중요도순: 같은 cluster_id 중 점수 최고 기사 1개만 표시
+                # 중요도순: 같은 cluster_id 중 복합점수 최고 기사 1개만 표시
                 dedup_sql = (
                     f"SELECT DISTINCT ON (COALESCE(cluster_id, id::text)) * "
                     f"FROM articles{where_clause} "
-                    f"ORDER BY COALESCE(cluster_id, id::text), score DESC, {DATE_COL} DESC"
+                    f"ORDER BY COALESCE(cluster_id, id::text), {_EFF_SCORE} DESC, {DATE_COL} DESC"
                 )
                 cur.execute(
                     f"SELECT COUNT(*) FROM ({dedup_sql}) sub", params
@@ -173,14 +182,22 @@ def api_articles():
                 total = cur.fetchone()["count"]
                 cur.execute(
                     f"SELECT * FROM ({dedup_sql}) sub "
-                    f"ORDER BY score DESC, {DATE_COL} DESC LIMIT %s OFFSET %s",
+                    f"ORDER BY {_EFF_SCORE} DESC, {DATE_COL} DESC LIMIT %s OFFSET %s",
                     params + [per_page, (page - 1) * per_page],
                 )
             else:
-                cur.execute(f"SELECT COUNT(*) FROM articles{where_clause}", params)
+                # 최신순도 같은 cluster_id 중 가장 최신 기사 1개만 표시
+                dedup_sql = (
+                    f"SELECT DISTINCT ON (COALESCE(cluster_id, id::text)) * "
+                    f"FROM articles{where_clause} "
+                    f"ORDER BY COALESCE(cluster_id, id::text), {DATE_COL} DESC"
+                )
+                cur.execute(
+                    f"SELECT COUNT(*) FROM ({dedup_sql}) sub", params
+                )
                 total = cur.fetchone()["count"]
                 cur.execute(
-                    f"SELECT * FROM articles{where_clause} "
+                    f"SELECT * FROM ({dedup_sql}) sub "
                     f"ORDER BY {DATE_COL} DESC LIMIT %s OFFSET %s",
                     params + [per_page, (page - 1) * per_page],
                 )
@@ -438,7 +455,7 @@ def api_trigger_fetch():
 
             try:
                 from relevance_ai import run_relevance_classification
-                run_relevance_classification(days=2)
+                run_relevance_classification(days=3)
             except Exception as e:
                 _logging.warning(f"[Trigger] AI 분류 실패: {e}")
 
@@ -452,6 +469,30 @@ def api_trigger_fetch():
 
     threading.Thread(target=_run, daemon=True, name="manual-fetch").start()
     return jsonify({"status": "started"})
+
+
+@app.route("/api/cluster/<cluster_id>")
+def api_cluster(cluster_id):
+    """같은 cluster_id를 가진 기사 전체 반환 (클러스터 뷰용)."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, title, title_ko, summary, summary_ko, source, lang,
+                          score, published_dt, fetched_at, link, keywords
+                   FROM articles
+                   WHERE cluster_id = %s AND (hidden IS NULL OR hidden = 0)
+                   ORDER BY score DESC, COALESCE(published_dt, fetched_at) DESC""",
+                (cluster_id,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            for k in ("published_dt", "fetched_at"):
+                if isinstance(r.get(k), datetime.datetime):
+                    r[k] = r[k].isoformat()
+    finally:
+        conn.close()
+    return jsonify(rows)
 
 
 @app.route("/api/sources")
@@ -498,7 +539,7 @@ def _scheduler_loop():
 
             try:
                 from relevance_ai import run_relevance_classification
-                hidden = run_relevance_classification(days=2)
+                hidden = run_relevance_classification(days=3)
                 _sched_logger.info(f"[Scheduler] AI 분류 완료 - {hidden}건 필터링")
             except Exception as e:
                 _sched_logger.warning(f"[Scheduler] AI 분류 실패: {e}")

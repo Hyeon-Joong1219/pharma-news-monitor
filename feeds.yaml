@@ -1,6 +1,284 @@
 feeds:
   # ══════════════════════════════════════════════════════════════
-  # 글로벌 전문지 (dedicated: true → 키워드 필터 없이 전체 저장)
+  # [국내 Tier-1] 제약/바이오/의료 전문지 — dedicated: true
+  # 아웃룩 한국모니터링 638개 메일 분석(13,090건) 기반 선정
+  # 전체 기사 수집 → AI 검증 (threshold 2: 극히 명백한 비제약만 차단)
+  # ══════════════════════════════════════════════════════════════
+
+  # ── 제약 전문 언론 (RSS 직접) ────────────────────────────────
+  - name: 데일리팜          # 아웃룩 1위 (1610건)
+    url: https://www.dailypharm.com/rss/news.xml
+    lang: ko
+    dedicated: true
+
+  - name: 메디파나뉴스       # 아웃룩 2위 (1477건)
+    url: http://medipana.com/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 약사공론           # 아웃룩 5위 (358건)
+    url: https://www.kpanews.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 히트뉴스           # 아웃룩 6위 (346건)
+    url: https://www.hitnews.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 의학신문           # 아웃룩 10위 (288건)
+    url: https://www.bosa.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 뉴스더보이스       # 아웃룩 15위 (220건)
+    url: http://www.newsthevoice.com/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 팜뉴스             # 아웃룩 19위 (149건)
+    url: http://www.pharmnews.com/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 청년의사           # 아웃룩 22위 (119건)
+    url: https://www.docdocdoc.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 의약뉴스           # 아웃룩 (89건)
+    url: https://www.newsmp.com/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 메디칼업저버       # 아웃룩 (79건)
+    url: https://www.monews.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 메디코파마         # 아웃룩 (67건)
+    url: https://www.medicopharma.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 메디소비자뉴스     # 아웃룩 13위 (246건)
+    url: http://www.medisobizanews.com/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 메디팜스투데이     # 아웃룩 18위 (162건)
+    url: https://www.apsk.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 파마타임스         # 아웃룩 (21건)
+    url: https://www.pharmatimes.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 매경헬스           # 아웃룩 (45건)
+    url: https://www.mkhealth.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 의계신문           # 아웃룩 (46건)
+    url: http://www.medworld.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 한국의약통신       # 아웃룩 (23건)
+    url: http://www.kmpnews.co.kr/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 데일리메디팜       # 제약 전문
+    url: http://www.dailymedipharm.com/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  # ── 바이오테크 전문 (사용자 명시 + 아웃룩 상위) ──────────────
+  - name: 더바이오           # 사용자 명시 + 아웃룩 14위 (228건)
+    url: https://www.thebionews.net/rss/allArticle.xml
+    lang: ko
+    dedicated: true
+
+  - name: 더바이오 종양학   # 더바이오 종양학 섹션
+    url: https://cdn.thebionews.net/rss/gns_S1N1.xml
+    lang: ko
+    dedicated: true
+
+  # ── 제약/의료 전문 (Google News 전체 수집) ───────────────────
+  - name: 데일리메디         # 아웃룩 3위 (697건)
+    url: https://news.google.com/rss/search?q=site:dailymedi.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 약업신문           # 아웃룩 4위 (645건)
+    url: https://news.google.com/rss/search?q=site:yakup.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 헬스코리아뉴스     # 아웃룩 7위 (310건)
+    url: https://news.google.com/rss/search?q=site:hkn24.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 메디컬투데이       # 아웃룩 9위 (304건)
+    url: https://news.google.com/rss/search?q=site:mdtoday.co.kr&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 메디포뉴스         # 아웃룩 12위 (246건)
+    url: https://news.google.com/rss/search?q=site:medifonews.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 메디게이트         # 아웃룩 29위 (101건)
+    url: https://news.google.com/rss/search?q=site:medigatenews.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 메디칼타임즈       # 아웃룩 26위 (106건)
+    url: https://news.google.com/rss/search?q=site:medicaltimes.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: e헬스통신          # 아웃룩 34위 (91건)
+    url: https://news.google.com/rss/search?q=site:e-healthnews.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 코메디닷컴         # 아웃룩 (75건)
+    url: https://kormedi.com/feed
+    lang: ko
+    dedicated: true
+
+  - name: 프레스나인         # 아웃룩 (70건)
+    url: https://news.google.com/rss/search?q=site:press9.kr&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 헬스조선           # 아웃룩 (63건)
+    url: http://health.chosun.com/site/data/rss/rss.xml
+    lang: ko
+    dedicated: true
+
+  - name: 메디팜헬스         # 아웃룩 (51건)
+    url: https://news.google.com/rss/search?q=site:medipharmhealth.co.kr&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 바이오스펙테이터   # 아웃룩 (39건) — 바이오테크 심층분석
+    url: https://news.google.com/rss/search?q=site:biospectator.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  - name: 보건뉴스           # 아웃룩 (23건)
+    url: https://news.google.com/rss/search?q=site:bokuennews.com&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: true
+
+  # ══════════════════════════════════════════════════════════════
+  # [국내 Tier-2] 경제/종합지 — dedicated: false
+  # 아웃룩 분석 기반 선정 / AI 승인 전 hidden=1 / title 키워드 필수
+  # ══════════════════════════════════════════════════════════════
+  - name: 더벨               # 아웃룩 8위 (306건) — 제약 딜·투자 심층
+    url: https://news.google.com/rss/search?q=site:thebell.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 뉴시스             # 아웃룩 11위 (285건)
+    url: https://www.newsis.com/RSS/health.xml
+    lang: ko
+    dedicated: false
+
+  - name: 이데일리           # 아웃룩 16위 (208건)
+    url: https://news.google.com/rss/search?q=site:edaily.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 뉴스1              # 아웃룩 17위 (169건)
+    url: https://news.google.com/rss/search?q=site:news1.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 서울경제           # 아웃룩 20위 (132건)
+    url: https://news.google.com/rss/search?q=site:sedaily.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 한국경제           # 아웃룩 21위 (132건)
+    url: https://news.google.com/rss/search?q=site:hankyung.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 머니S              # 아웃룩 24위 (116건) — 신규 추가
+    url: https://news.google.com/rss/search?q=site:moneys.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 조선비즈           # 아웃룩 25위 (111건)
+    url: https://news.google.com/rss/search?q=site:biz.chosun.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 연합뉴스           # 아웃룩 27위 (103건)
+    url: https://www.yna.co.kr/rss/health.xml
+    lang: ko
+    dedicated: false
+
+  - name: 아시아경제         # 아웃룩 28위 (101건) — 신규 추가
+    url: https://news.google.com/rss/search?q=site:asiae.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 머니투데이         # 아웃룩 30위 (99건)
+    url: https://news.google.com/rss/search?q=site:mt.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 이투데이           # 아웃룩 31위 (98건)
+    url: https://news.google.com/rss/search?q=site:etoday.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 매일경제           # 아웃룩 36위 (71건)
+    url: https://news.google.com/rss/search?q=site:mk.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 뉴스웨이           # 아웃룩 (65건)
+    url: https://news.google.com/rss/search?q=site:newsway.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 더구루             # 아웃룩 (61건) — 글로벌 제약 딜
+    url: https://news.google.com/rss/search?q=site:theguru.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 비즈니스포스트     # 아웃룩 (52건)
+    url: https://news.google.com/rss/search?q=site:businesspost.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 파이낸셜뉴스       # 아웃룩 (51건)
+    url: https://news.google.com/rss/search?q=site:fnnews.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 헤럴드경제         # 아웃룩 (29건)
+    url: https://news.google.com/rss/search?q=site:heraldcorp.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  - name: 조선일보           # 아웃룩 22위 (120건)
+    url: https://news.google.com/rss/search?q=site:chosun.com+%EC%A1%B0%EC%84%A0%EC%9D%BC%EB%B3%B4+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    lang: ko
+    dedicated: false
+
+  # ══════════════════════════════════════════════════════════════
+  # [글로벌 Tier-1] 제약/바이오 전문지 — dedicated: true
   # ══════════════════════════════════════════════════════════════
   - name: FiercePharma
     url: https://www.fiercepharma.com/rss/xml
@@ -37,84 +315,11 @@ feeds:
     lang: en
     dedicated: true
 
-  - name: Pharmaceutical Technology
-    url: https://www.pharmaceutical-technology.com/feed/
-    lang: en
-    dedicated: true
-
   - name: MedCity News
     url: https://medcitynews.com/feed/
     lang: en
     dedicated: true
 
-  - name: Drug Discovery Today
-    url: https://rss.sciencedirect.com/publication/science/13596446
-    lang: en
-    dedicated: true
-
-  # ── 글로벌 전문지 (Google News 우회, 키워드 필터 적용) ────────
-  - name: Evaluate Vantage
-    url: https://news.google.com/rss/search?q=site:evaluate.com+pharma+biotech&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: BioSpace
-    url: https://news.google.com/rss/search?q=site:biospace.com+pharma+biotech&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: OncLive
-    url: https://news.google.com/rss/search?q=site:onclive.com+FDA+clinical+trial&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: RAPS
-    url: https://news.google.com/rss/search?q=site:raps.org+FDA+regulatory&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: PharmaLive
-    url: https://news.google.com/rss/search?q=site:pharmalive.com+FDA+drug&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  # ── 해외 제약 전문 출판 (dedicated: true → 키워드 필터 없이 전체 저장) ──
-  - name: PharmaVoice
-    url: https://news.google.com/rss/search?q=site:pharmavoice.com+pharma+biotech&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Contract Pharma
-    url: https://contractpharma.com/feed
-    lang: en
-    dedicated: true
-
-  - name: BioWorld
-    url: https://news.google.com/rss/search?q=site%3Abioworld.com%20biotech%20pharma%20drug&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Pharmacy Times
-    url: https://news.google.com/rss/search?q=site%3Apharmacytimes.com%20drug%20FDA%20approval&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Clinical Leader
-    url: https://news.google.com/rss/search?q=site%3Aclinicalleader.com%20clinical%20trial%20pharma&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Healio
-    url: https://news.google.com/rss/search?q=site%3Ahealio.com%20pharma%20drug%20clinical&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  - name: Drug Topics
-    url: https://news.google.com/rss/search?q=site%3Adrugtopics.com%20drug%20pharmacy&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  # ── 고품질 해외 전문 소스 (신규 추가) ────────────────────────────
   - name: MedPage Today
     url: https://www.medpagetoday.com/rss/headlines.xml
     lang: en
@@ -125,56 +330,17 @@ feeds:
     lang: en
     dedicated: true
 
-  # Pink Sheet · Scrip Intelligence 등 Citeline 계열 규제/딜 전문지
-  - name: Pink Sheet (Citeline)
-    url: https://news.google.com/rss/search?q=site:citeline.com+pharma+drug+FDA+regulatory&hl=en-US&gl=US&ceid=US:en
+  - name: Drug Discovery Today
+    url: https://rss.sciencedirect.com/publication/science/13596446
     lang: en
     dedicated: true
 
-  # PMLive — 글로벌 제약업계 전문 미디어 (임상·규제·딜)
-  - name: PMLive
-    url: https://news.google.com/rss/search?q=site:pmlive.com+pharma+drug+clinical+regulatory&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-  # ── 글로벌 메이저 경제지 (AI 필터링 적용, 제약/바이오 검색어 제한) ──
-  - name: CNBC Health
-    url: https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000108
-    lang: en
-    dedicated: false
-
-  - name: Axios Healthcare
-    url: https://news.google.com/rss/search?q=site:axios.com+pharma+biotech+healthcare+drug&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Forbes Healthcare
-    url: https://news.google.com/rss/search?q=site:forbes.com+pharma+biotech+drug+FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Business Insider Health
-    url: https://news.google.com/rss/search?q=site:businessinsider.com+pharma+biotech+drug+FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Barron's Biotech
-    url: https://news.google.com/rss/search?q=site:barrons.com+biotech+pharma+drug+FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: MarketWatch Pharma
-    url: https://news.google.com/rss/search?q=site:marketwatch.com+pharma+biotech+drug+FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: WSJ
-    url: https://news.google.com/rss/search?q=site:wsj.com+pharma+FDA+biotech&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: NYT
-    url: https://news.google.com/rss/search?q=site:nytimes.com+pharma+FDA+drug&hl=en-US&gl=US&ceid=US:en
+  # ══════════════════════════════════════════════════════════════
+  # [글로벌 Tier-2] 주요 경제/과학지 — dedicated: false
+  # Google News 제약 키워드 검색 / AI 승인 후 노출
+  # ══════════════════════════════════════════════════════════════
+  - name: Reuters
+    url: https://news.google.com/rss/search?q=site:reuters.com+pharma+FDA+drug&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: false
 
@@ -183,18 +349,8 @@ feeds:
     lang: en
     dedicated: false
 
-  - name: Reuters
-    url: https://news.google.com/rss/search?q=site:reuters.com+pharma+FDA+drug&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: FT
-    url: https://news.google.com/rss/search?q=site:ft.com+pharma+biotech&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: The Economist
-    url: https://news.google.com/rss/search?q=site:economist.com+pharma+biotech+healthcare&hl=en-US&gl=US&ceid=US:en
+  - name: WSJ
+    url: https://news.google.com/rss/search?q=site:wsj.com+pharma+FDA+biotech&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: false
 
@@ -203,753 +359,7 @@ feeds:
     lang: en
     dedicated: false
 
-  # ══════════════════════════════════════════════════════════════
-  # 국내 전문지 (dedicated: true → 키워드 필터 없이 전체 저장)
-  # ══════════════════════════════════════════════════════════════
-  - name: 히트뉴스
-    url: https://www.hitnews.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 팜뉴스
-    url: http://www.pharmnews.com/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 메디파나뉴스
-    url: http://medipana.com/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 의약뉴스
-    url: https://www.newsmp.com/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 청년의사
-    url: https://www.docdocdoc.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 의학신문
-    url: https://www.bosa.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 약사공론
-    url: https://www.kpanews.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  # ── 국내 전문지 (Google News 우회, 키워드 필터 적용) ──────────
-  - name: 약업신문
-    url: https://news.google.com/rss/search?q=site:yakup.com+%EC%A0%9C%EC%95%BD&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 바이오스펙테이터
-    url: https://news.google.com/rss/search?q=site:biospectator.com&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디게이트뉴스
-    url: https://news.google.com/rss/search?q=site:medigatenews.com+%EC%A0%9C%EC%95%BD&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  # ── 국내 종합 (키워드 필터 적용) ─────────────────────────────
-  - name: 연합뉴스
-    url: https://www.yna.co.kr/rss/health.xml
-    lang: ko
-    dedicated: false
-
-  - name: 뉴스1
-    url: https://news.google.com/rss/search?q=site:news1.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 뉴시스
-    url: https://www.newsis.com/RSS/health.xml
-    lang: ko
-    dedicated: false
-
-  - name: 헬스조선
-    url: http://health.chosun.com/site/data/rss/rss.xml
-    lang: ko
-    dedicated: false
-
-  # ── 모니터링 메일 고빈도 출처 추가 (한국 주요 경제지, 키워드 필터) ──
-  - name: 이데일리
-    url: https://news.google.com/rss/search?q=site:edaily.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 머니투데이
-    url: https://news.google.com/rss/search?q=site:mt.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 조선비즈
-    url: https://news.google.com/rss/search?q=site:biz.chosun.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 서울경제
-    url: https://news.google.com/rss/search?q=site:sedaily.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 헤럴드경제
-    url: https://news.google.com/rss/search?q=site:heraldcorp.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 더벨
-    url: https://news.google.com/rss/search?q=site:thebell.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 이투데이
-    url: https://news.google.com/rss/search?q=site:etoday.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 매일경제
-    url: https://news.google.com/rss/search?q=site:mk.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 한국경제
-    url: https://news.google.com/rss/search?q=site:hankyung.com+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 뉴시스 헬스
-    url: https://news.google.com/rss/search?q=site:newsis.com+%EB%89%B4%EC%8B%9C%EC%8A%A4%20%ED%97%AC%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: true
-
-  - name: 데일리팜
-    url: https://www.dailypharm.com/rss/news.xml
-    lang: ko
-    dedicated: false
-
-  - name: 더바이오
-    url: https://www.thebionews.net/rss/allArticle.xml
-    lang: ko
-    dedicated: true
-
-  - name: 더바이오 종양학
-    url: https://cdn.thebionews.net/rss/gns_S1N1.xml
-    lang: ko
-    dedicated: true
-
-  - name: 데일리메디
-    url: https://news.google.com/rss/search?q=site:dailymedi.com+%EB%8D%B0%EC%9D%BC%EB%A6%AC%EB%A9%94%EB%94%94%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디소비자뉴스
-    url: http://www.medisobizanews.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 헬스코리아뉴스
-    url: https://news.google.com/rss/search?q=site:hkn24.com+%ED%97%AC%EC%8A%A4%EC%BD%94%EB%A6%AC%EC%95%84%EB%89%B4%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디칼타임즈
-    url: https://news.google.com/rss/search?q=site:medicaltimes.com+%EB%A9%94%EB%94%94%EC%B9%BC%ED%83%80%EC%9E%84%EC%A6%88%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디코파마
-    url: https://www.medicopharma.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 비즈워치
-    url: https://news.bizwatch.co.kr/rss
-    lang: ko
-    dedicated: false
-
-  - name: 매경헬스
-    url: https://www.mkhealth.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 프레스나인
-    url: https://news.google.com/rss/search?q=site:press9.kr+%ED%94%84%EB%A0%88%EC%8A%A4%EB%82%98%EC%9D%B8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디팜스투데이
-    url: https://www.apsk.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 뉴스더보이스
-    url: http://www.newsthevoice.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 아주경제
-    url: https://news.google.com/rss/search?q=site:ajunews.com+%EC%95%84%EC%A3%BC%EA%B2%BD%EC%A0%9C%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 파이낸셜뉴스
-    url: https://news.google.com/rss/search?q=site:fnnews.com+%ED%8C%8C%EC%9D%B4%EB%82%B8%EC%85%9C%EB%89%B4%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 글로벌이코노믹
-    url: https://news.google.com/rss/search?q=site:g-enews.com+%EA%B8%80%EB%A1%9C%EB%B2%8C%EC%9D%B4%EC%BD%94%EB%85%B8%EB%AF%B9%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 쿠키뉴스
-    url: https://www.kukinews.com/rss
-    lang: ko
-    dedicated: false
-
-  - name: 메디컬투데이
-    url: https://news.google.com/rss/search?q=site:mdtoday.co.kr+%EB%A9%94%EB%94%94%EC%BB%AC%ED%88%AC%EB%8D%B0%EC%9D%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 디지털투데이
-    url: https://www.digitaltoday.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 파마타임스
-    url: https://www.pharmatimes.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 미디어메디
-    url: http://www.mediamedi.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 문화일보
-    url: https://news.google.com/rss/search?q=site:munhwa.com+%EB%AC%B8%ED%99%94%EC%9D%BC%EB%B3%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디칼업저버
-    url: https://www.monews.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 아시아투데이
-    url: https://news.google.com/rss/search?q=site:asiatoday.co.kr+%EC%95%84%EC%8B%9C%EC%95%84%ED%88%AC%EB%8D%B0%EC%9D%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 소비자가만드는신문
-    url: https://www.consumernews.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 메디팜헬스
-    url: https://news.google.com/rss/search?q=site:medipharmhealth.co.kr+%EB%A9%94%EB%94%94%ED%8C%9C%ED%97%AC%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 뉴스웨이
-    url: https://news.google.com/rss/search?q=site:newsway.co.kr+%EB%89%B4%EC%8A%A4%EC%9B%A8%EC%9D%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디포뉴스
-    url: https://news.google.com/rss/search?q=site:medifonews.com+%EB%A9%94%EB%94%94%ED%8F%AC%EB%89%B4%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 뉴스핌
-    url: https://news.google.com/rss/search?q=site:newspim.com+%EB%89%B4%EC%8A%A4%ED%95%8C%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 블로터
-    url: https://www.bloter.net/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 아시아타임즈
-    url: https://news.google.com/rss/search?q=site:asiatime.co.kr+%EC%95%84%EC%8B%9C%EC%95%84%ED%83%80%EC%9E%84%EC%A6%88%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 인사이트코리아
-    url: http://www.insightkorea.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 시사저널e
-    url: https://www.sisajournal-e.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 뉴스토마토
-    url: http://www.newstomato.com/rss
-    lang: ko
-    dedicated: false
-
-  - name: 한스경제
-    url: http://www.hansbiz.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 조선일보
-    url: https://news.google.com/rss/search?q=site:chosun.com+%EC%A1%B0%EC%84%A0%EC%9D%BC%EB%B3%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 뉴데일리
-    url: https://news.google.com/rss/search?q=site:biz.newdaily.co.kr+%EB%89%B4%EB%8D%B0%EC%9D%BC%EB%A6%AC%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 팍스메디컬뉴스
-    url: https://www.paxmedicalnews.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 핀포인트뉴스
-    url: https://www.pinpointnews.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 서울경제TV
-    url: https://www.sentv.co.kr/rss
-    lang: ko
-    dedicated: false
-
-  - name: 금융경제플러스
-    url: https://www.kndaily.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 미디어펜
-    url: https://news.google.com/rss/search?q=site:mediapen.com+%EB%AF%B8%EB%94%94%EC%96%B4%ED%8E%9C%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 비즈월드
-    url: http://www.bizwnews.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 프레스맨
-    url: https://www.pressman.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 보건뉴스
-    url: https://news.google.com/rss/search?q=site:bokuennews.com+%EB%B3%B4%EA%B1%B4%EB%89%B4%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 데일리한국
-    url: https://daily.hankooki.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 의계신문
-    url: http://www.medworld.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 위키리크스한국
-    url: http://www.wikileaks-kr.org/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 더구루
-    url: https://news.google.com/rss/search?q=site:theguru.co.kr+%EB%8D%94%EA%B5%AC%EB%A3%A8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 아이뉴스24
-    url: https://news.google.com/rss/search?q=site:inews24.com+%EC%95%84%EC%9D%B4%EB%89%B4%EC%8A%A424%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 디지털타임스
-    url: https://news.google.com/rss/search?q=site:dt.co.kr+%EB%94%94%EC%A7%80%ED%84%B8%ED%83%80%EC%9E%84%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 한국금융신문
-    url: https://news.google.com/rss/search?q=site:fntimes.com+%ED%95%9C%EA%B5%AD%EA%B8%88%EC%9C%B5%EC%8B%A0%EB%AC%B8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 스마트투데이
-    url: https://news.google.com/rss/search?q=site:smarttoday.co.kr+%EC%8A%A4%EB%A7%88%ED%8A%B8%ED%88%AC%EB%8D%B0%EC%9D%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메디컬헤럴드
-    url: http://www.mediherald.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 사이언스엠디
-    url: https://news.google.com/rss/search?q=site:sciencemd.com+%EC%82%AC%EC%9D%B4%EC%96%B8%EC%8A%A4%EC%97%A0%EB%94%94%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 더밸류뉴스
-    url: https://news.google.com/rss/search?q=site:thevaluenews.co.kr+%EB%8D%94%EB%B0%B8%EB%A5%98%EB%89%B4%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 메트로신문
-    url: https://news.google.com/rss/search?q=site:metroseoul.co.kr+%EB%A9%94%ED%8A%B8%EB%A1%9C%EC%8B%A0%EB%AC%B8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 비즈니스포스트
-    url: https://news.google.com/rss/search?q=site:businesspost.co.kr+%EB%B9%84%EC%A6%88%EB%8B%88%EC%8A%A4%ED%8F%AC%EC%8A%A4%ED%8A%B8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 파이낸셜포스트
-    url: https://www.financialpost.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 더퍼블릭
-    url: https://www.thepublic.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 오늘경제
-    url: https://www.startuptoday.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 여성경제신문
-    url: https://www.womaneconomy.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 부산일보
-    url: https://news.google.com/rss/search?q=site:mobile.busan.com+%EB%B6%80%EC%82%B0%EC%9D%BC%EB%B3%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 중부일보
-    url: https://www.joongboo.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 뷰어스
-    url: https://news.google.com/rss/search?q=site:theviewers.co.kr+%EB%B7%B0%EC%96%B4%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 한국의약통신
-    url: http://www.kmpnews.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 서울와이어
-    url: https://www.seoulwire.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: MTN
-    url: https://news.google.com/rss/search?q=site:news.mtn.co.kr+MTN%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 허프포스트코리아
-    url: https://news.google.com/rss/search?q=site:huffingtonpost.kr+%ED%97%88%ED%94%84%ED%8F%AC%EC%8A%A4%ED%8A%B8%EC%BD%94%EB%A6%AC%EC%95%84%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 지디넷코리아
-    url: https://www.zdnet.co.kr/feed
-    lang: ko
-    dedicated: false
-
-  - name: 더팩트
-    url: https://news.google.com/rss/search?q=site:news.tf.co.kr+%EB%8D%94%ED%8C%A9%ED%8A%B8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 동아사이언스
-    url: https://news.google.com/rss/search?q=site:dongascience.com+%EB%8F%99%EC%95%84%EC%82%AC%EC%9D%B4%EC%96%B8%EC%8A%A4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: e헬스통신
-    url: https://news.google.com/rss/search?q=site:e-healthnews.com+e%ED%97%AC%EC%8A%A4%ED%86%B5%EC%8B%A0%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 브릿지경제
-    url: https://news.google.com/rss/search?q=site:viva100.com+%EB%B8%8C%EB%A6%BF%EC%A7%80%EA%B2%BD%EC%A0%9C%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 매일일보
-    url: https://news.google.com/rss/search?q=site:m-i.kr+%EB%A7%A4%EC%9D%BC%EC%9D%BC%EB%B3%B4%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 이뉴스투데이
-    url: http://www.enewstoday.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 매경이코노미
-    url: https://news.google.com/rss/search?q=site:mk.co.kr+%EB%A7%A4%EA%B2%BD%EC%9D%B4%EC%BD%94%EB%85%B8%EB%AF%B8%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 헬스앤마켓
-    url: https://news.google.com/rss/search?q=site:h-money.co.kr+%ED%97%AC%EC%8A%A4%EC%95%A4%EB%A7%88%EC%BC%93%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 톱데일리
-    url: https://www.topdaily.kr/rss
-    lang: ko
-    dedicated: false
-
-  - name: 뉴시안
-    url: https://www.newsian.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 데일리메디팜
-    url: http://www.dailymedipharm.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 이코노믹리뷰
-    url: https://www.econovill.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 연합인포맥스
-    url: https://news.einfomax.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 스카이데일리
-    url: https://news.google.com/rss/search?q=site%3Askyedaily.com%20%EC%A0%9C%EC%95%BD%20%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: false
-
-  - name: 중소기업신문
-    url: https://www.smedaily.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: 국제뉴스
-    url: https://www.gukjenews.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-  - name: FETV
-    url: https://www.fetv.co.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: PM360
-    url: https://pm360online.com/feed
-    lang: en
-    dedicated: true
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: The Economist Health
-    url: https://news.google.com/rss/search?q=site%3Aeconomist.com%20pharma%20biotech%20healthcare&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
-
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: IT조선
-    url: https://it.chosun.com/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-
-  # ── 자동 추가 (국내) ────────────────────────────────────
-  - name: 코메디닷컴
-    url: https://kormedi.com/feed
-    lang: ko
-    dedicated: false
-
-  - name: 뉴스드림
-    url: https://www.newsdream.kr/rss/allArticle.xml
-    lang: ko
-    dedicated: false
-
-
-  # ── 자동 추가 (해외) ────────────────────────────────────
-  - name: Managed Healthcare
-    url: https://news.google.com/rss/search?q=site%3Amanagedhealthcareexecutive.com%20healthcare%20pharma&hl=en-US&gl=US&ceid=US:en
+  - name: CNBC Health
+    url: https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000108
     lang: en
     dedicated: false
-
-  - name: Science Daily
-    url: https://news.google.com/rss/search?q=site%3Asciencedaily.com%20drug%20clinical%20trial%20FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: The BMJ
-    url: https://news.google.com/rss/search?q=site%3Abmj.com%20drug%20clinical%20trial&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: The Lancet
-    url: https://news.google.com/rss/search?q=site%3Athelancet.com%20drug%20clinical%20trial&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-
-  - name: Applied Clinical Trials
-    url: https://news.google.com/rss/search?q=site%3Aappliedclinicaltrialsonline.com%20clinical%20trial&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
-

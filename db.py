@@ -2,6 +2,16 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+def _load_env():
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_path):
+        for line in open(env_path, encoding="utf-8"):
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+_load_env()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 
