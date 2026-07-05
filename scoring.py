@@ -26,6 +26,16 @@ _KO_STOPWORDS = {
     "이","가","을","를","은","는","의","에","에서","로","으로","과","와",
     "도","만","보다","하다","있다","없다","위해","대해","관련","통해","위한",
     "대한","따른","따라","등","및","더","약","약품","회사","기업","뉴스",
+    # 제약/바이오 업계 기사에 범용적으로 등장해 변별력이 없는 단어들.
+    # (2026-07 실서비스에서 이 단어들만으로 무관한 기사 448건이 한 클러스터로
+    #  묶이는 체이닝 버그가 발견돼 추가됨 — 기업명·제품명만으로 클러스터링되도록)
+    "개발","신약","임상","출시","허가","계약","참여","협력","확대","플랫폼",
+    "글로벌","국내","해외","성료","개최","선정","구축","전략","공개","진행",
+    "발표","추진","지정","승인","획득","완료","참가","강화","파트너십","연구",
+    "협약","체결","행사","심포지엄","과제","사업","수출","투자","실적","매출",
+    "대표","회장","사장","경쟁력","솔루션","공급","제공","운영","지원","기술",
+    "이전","분야","시장","제품","국가","정부","대상","예정","전망","계획",
+    "사례","기념","주년","치료제","바이오",
 }
 STOPWORDS = _EN_STOPWORDS | _KO_STOPWORDS
 
@@ -64,9 +74,12 @@ def compute_relevance_score(text: str, source: str,
 
 _KO_RE = re.compile(r'[가-힣]')
 
-def significant_words(text: str, min_len: int = 4) -> set:
+def significant_words(text: str, min_len_ko: int = 2, min_len_en: int = 4) -> set:
     """제목에서 의미있는 단어 집합 추출.
-    한국어 토큰은 2자 이상, 영문 토큰은 min_len 이상으로 처리."""
+    한국어 토큰은 min_len_ko자 이상, 영문 토큰은 min_len_en자 이상으로 처리.
+    (영문 임계값은 cluster_settings.min_word_length의 영향을 받지 않음 —
+     과거 두 임계값이 같은 파라미터를 공유해 영문 클러스터링까지
+     느슨해지는 버그가 있었음)"""
     if not text:
         return set()
     tokens = re.split(r'[\s,.\-_:;!?/|&()\[\]"\'·]+', text.lower())
@@ -75,9 +88,9 @@ def significant_words(text: str, min_len: int = 4) -> set:
         if t in STOPWORDS:
             continue
         if _KO_RE.search(t):
-            if len(t) >= 2:
+            if len(t) >= min_len_ko:
                 result.add(t)
-        elif len(t) >= min_len:
+        elif len(t) >= min_len_en:
             result.add(t)
     return result
 
@@ -85,6 +98,7 @@ def significant_words(text: str, min_len: int = 4) -> set:
 class UnionFind:
     def __init__(self, ids):
         self.parent = {i: i for i in ids}
+        self.size   = {i: 1 for i in ids}
 
     def find(self, x):
         while self.parent[x] != x:
@@ -92,8 +106,17 @@ class UnionFind:
             x = self.parent[x]
         return x
 
+    def cluster_size(self, x):
+        return self.size[self.find(x)]
+
     def union(self, x, y):
-        self.parent[self.find(x)] = self.find(y)
+        rx, ry = self.find(x), self.find(y)
+        if rx == ry:
+            return
+        if self.size[rx] < self.size[ry]:
+            rx, ry = ry, rx
+        self.parent[ry] = rx
+        self.size[rx] += self.size[ry]
 
 
 def cluster_articles(articles: list, cfg: dict) -> dict:
@@ -101,10 +124,11 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
     같은 이슈를 다루는 기사들을 묶어 {cluster_root: [articles]} 반환.
     단어 역색인(inverted index)으로 O(n·k) 수준으로 처리.
     """
-    window_sec  = cfg.get("time_window_hours", 48) * 3600
-    min_shared  = cfg.get("min_shared_words", 4)
-    min_ratio   = cfg.get("min_overlap_ratio", 0.4)
-    min_len     = cfg.get("min_word_length", 2)
+    window_sec   = cfg.get("time_window_hours", 48) * 3600
+    min_shared   = cfg.get("min_shared_words", 4)
+    min_ratio    = cfg.get("min_overlap_ratio", 0.4)
+    min_len_ko   = cfg.get("min_word_length", 2)
+    max_cluster  = cfg.get("max_cluster_size", 25)
 
     # 기사별 메타 준비
     meta = {}
@@ -113,9 +137,9 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
             t = datetime.fromisoformat(a["fetched_at"])
         except Exception:
             t = datetime.utcnow()
-        # 영문 + 한국어 번역 제목 모두 활용
-        words = significant_words(a.get("title") or "", min_len)
-        words |= significant_words(a.get("title_ko") or "", min_len)
+        # 영문 + 한국어 번역 제목 모두 활용 (영문 임계값은 4자 고정)
+        words = significant_words(a.get("title") or "", min_len_ko)
+        words |= significant_words(a.get("title_ko") or "", min_len_ko)
         meta[a["id"]] = {"time": t, "words": words, "source": a["source"]}
 
     # 단어 역색인
@@ -149,6 +173,10 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
             # 공유 단어 수 + 비율(짧은 쪽 대비) 둘 다 만족해야 클러스터
             shorter = min(len(m["words"]), len(cm["words"]))
             if shorter > 0 and shared >= min_shared and shared / shorter >= min_ratio:
+                # 안전장치: 단어 매칭이 느슨해 잘못 체이닝되더라도
+                # 클러스터가 무한정 커지지 않도록 크기 상한을 둠
+                if uf.cluster_size(aid) + uf.cluster_size(cid) > max_cluster:
+                    continue
                 uf.union(aid, cid)
 
     id_map = {a["id"]: a for a in articles}

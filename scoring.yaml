@@ -507,7 +507,8 @@ cluster_settings:
   min_shared_words: 4       # 제목 공유 단어 수 기준 (낮으면 거대 클러스터 발생)
   min_overlap_ratio: 0.4    # 공유 단어 / 짧은 제목 단어 수 최소 비율
   source_boost_per_source:  0.5   # 추가 매체 1곳당 50% 점수 가산
-  min_word_length: 2        # 클러스터링에 사용할 최소 단어 길이 (한국어 포함)
+  min_word_length: 2        # 클러스터링에 사용할 한국어 최소 단어 길이 (영문은 4자 고정)
+  max_cluster_size: 25      # 클러스터 크기 상한 (체이닝으로 무관한 기사가 계속 합쳐지는 것 방지)
 
 score_display:
   tier3: 20   # 🔥🔥🔥 대형 이슈
