@@ -50,7 +50,24 @@ def init_db():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_lang     ON articles(lang)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_score    ON articles(score DESC)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_source   ON articles(source)")
-        # 기존 테이블에 cluster_id 컬럼 추가 (이미 존재하면 무시)
+        # 저장 시 제목+소스 중복 방어 조회용
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_source_title ON articles(source, title)")
+        # 기존 테이블에 컬럼 추가 (이미 존재하면 무시)
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS cluster_id TEXT")
+        # 사용자 피드백: 0=없음, -1=사용자가 '관련 없음' 처리, 1=사용자가 복구
+        # user_feedback != 0 인 기사의 hidden은 자동 파이프라인이 덮어쓰지 않음
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS user_feedback INTEGER DEFAULT 0")
+        # 피드별 수집 상태 (fetch.py가 매 실행 upsert)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS feed_health (
+                source               TEXT PRIMARY KEY,
+                last_status          TEXT,
+                last_error           TEXT,
+                last_run_at          TIMESTAMP,
+                last_success_at      TIMESTAMP,
+                consecutive_failures INTEGER DEFAULT 0,
+                last_saved           INTEGER
+            )
+        """)
     conn.commit()
     conn.close()

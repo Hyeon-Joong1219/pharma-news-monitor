@@ -233,7 +233,16 @@ def _classify_batch(client, articles: list) -> dict:
             raw = "\n".join(raw.split("\n")[1:])
             raw = raw.rsplit("```", 1)[0].strip()
         data = json.loads(raw)
-        return {articles[item["id"] - 1]["id"]: float(item["score"]) for item in data}
+        # LLM이 잘못된 id를 반환해도 배치 전체가 무효화되지 않도록 개별 검증
+        result = {}
+        for item in data:
+            try:
+                idx = int(item["id"]) - 1
+                if 0 <= idx < len(articles):
+                    result[articles[idx]["id"]] = float(item["score"])
+            except (KeyError, ValueError, TypeError):
+                continue
+        return result
     except Exception as e:
         logger.warning(f"Groq 분류 실패 (배치): {e}")
         return {}
@@ -255,8 +264,11 @@ def _apply_hard_exclude(conn, articles: list) -> list:
     if blocked_ids:
         with conn.cursor() as cur:
             for aid in blocked_ids:
+                # 사용자가 직접 복구한 기사(user_feedback≠0)는 재차 숨기지 않음
                 cur.execute(
-                    "UPDATE articles SET hidden=1, ai_classified=1, relevance_score=0 WHERE id=%s",
+                    "UPDATE articles SET "
+                    "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN 1 ELSE hidden END, "
+                    "ai_classified=1, relevance_score=0 WHERE id=%s",
                     (aid,),
                 )
         conn.commit()
@@ -309,7 +321,9 @@ def _run_backfill(client, dedicated: set) -> int:
                     if hidden:
                         hidden_cnt += 1
                     cur.execute(
-                        "UPDATE articles SET relevance_score=%s, hidden=%s, ai_classified=1 WHERE id=%s",
+                        "UPDATE articles SET relevance_score=%s, "
+                        "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN %s ELSE hidden END, "
+                        "ai_classified=1 WHERE id=%s",
                         (score * 10, hidden, a["id"]),
                     )
             conn.commit()
@@ -390,7 +404,9 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
                     if hidden:
                         hidden_cnt += 1
                     cur.execute(
-                        "UPDATE articles SET relevance_score=%s, hidden=%s, ai_classified=1 WHERE id=%s",
+                        "UPDATE articles SET relevance_score=%s, "
+                        "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN %s ELSE hidden END, "
+                        "ai_classified=1 WHERE id=%s",
                         (score * 10, hidden, a["id"]),
                     )
             conn.commit()

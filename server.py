@@ -1,7 +1,6 @@
 import threading
 import time
 import webbrowser
-import requests
 import urllib3
 import os
 import datetime
@@ -12,7 +11,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from flask import Flask, jsonify, render_template, request
 from db import get_db, init_db
 
-_TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single"
 _brief_cache: dict = {}
 
 
@@ -68,17 +66,8 @@ def _generate_brief(articles: list, lang: str) -> str:
         return f"브리프 생성 실패: {e}"
 
 
-def _translate(text: str) -> str:
-    if not text or not text.strip():
-        return ""
-    try:
-        params = {"client": "gtx", "sl": "en", "tl": "ko", "dt": "t", "q": text[:800]}
-        r = requests.get(_TRANSLATE_URL, params=params, verify=False, timeout=8)
-        r.raise_for_status()
-        return "".join(seg[0] for seg in r.json()[0] if seg[0])
-    except Exception:
-        return ""
-
+# 번역은 fetch.py 구현을 재사용 (중복 제거)
+from fetch import translate_to_ko as _translate
 
 app = Flask(__name__)
 
@@ -96,17 +85,19 @@ def index():
     return render_template("index.html", sources=sources)
 
 
-@app.route("/api/articles")
-def api_articles():
-    q        = request.args.get("q", "").strip()
-    source   = request.args.get("source", "").strip()
-    period   = request.args.get("period", "").strip()
-    lang     = request.args.get("lang", "").strip()
-    sort     = request.args.get("sort", "date")
-    page     = max(1, int(request.args.get("page", 1)))
-    per_page = 50
+def _build_article_filters(args, include_lang=True):
+    """공용 WHERE 절 빌더 — /api/articles 와 /api/counts 가 공유.
+    반환: (where_parts, params)"""
+    q           = args.get("q", "").strip()
+    source      = args.get("source", "").strip()
+    period      = args.get("period", "").strip()
+    lang        = args.get("lang", "").strip()
+    sort        = args.get("sort", "date")
+    show_hidden = args.get("show_hidden", "0") == "1"
 
-    where_parts, params = ["(hidden IS NULL OR hidden = 0)"], []
+    # show_hidden=1: 숨김 기사만 표시 (AI 필터 감사용)
+    where_parts = ["hidden = 1"] if show_hidden else ["(hidden IS NULL OR hidden = 0)"]
+    params = []
 
     if q:
         where_parts.append(
@@ -116,12 +107,12 @@ def api_articles():
     if source:
         where_parts.append("source = %s")
         params.append(source)
-    if lang:
+    if include_lang and lang:
         where_parts.append("lang = %s")
         params.append(lang)
 
-    date_from = request.args.get("date_from", "").strip()
-    date_to   = request.args.get("date_to",   "").strip()
+    date_from = args.get("date_from", "").strip()
+    date_to   = args.get("date_to",   "").strip()
 
     # published_dt 없으면 fetched_at으로 대체
     DATE_FILTER = "COALESCE(published_dt, fetched_at)"
@@ -154,6 +145,17 @@ def api_articles():
         default_interval = "7 days" if sort == "score" else "30 days"
         where_parts.append(f"{FA} >= NOW() - INTERVAL '{default_interval}'")
 
+    return where_parts, params
+
+
+@app.route("/api/articles")
+def api_articles():
+    sort     = request.args.get("sort", "date")
+    page     = max(1, int(request.args.get("page", 1)))
+    per_page = 50
+
+    where_parts, params = _build_article_filters(request.args)
+
     DATE_COL     = "COALESCE(published_dt, fetched_at)"
     where_clause = " WHERE " + " AND ".join(where_parts)
 
@@ -170,11 +172,14 @@ def api_articles():
     try:
         with conn.cursor() as cur:
             if sort == "score":
-                # 중요도순: 같은 cluster_id 중 복합점수 최고 기사 1개만 표시
+                # 중요도순: 같은 cluster_id 중 복합점수 최고 기사 1개만 표시.
+                # 여러 매체가 동시에 다룬 이슈(source_count)를 최우선 기준으로 삼고,
+                # 그 안에서 AI관련성×키워드점수 복합 지표로 2차 정렬한다.
                 dedup_sql = (
                     f"SELECT DISTINCT ON (COALESCE(cluster_id, id::text)) * "
                     f"FROM articles{where_clause} "
-                    f"ORDER BY COALESCE(cluster_id, id::text), {_EFF_SCORE} DESC, {DATE_COL} DESC"
+                    f"ORDER BY COALESCE(cluster_id, id::text), "
+                    f"COALESCE(source_count,1) DESC, {_EFF_SCORE} DESC, {DATE_COL} DESC"
                 )
                 cur.execute(
                     f"SELECT COUNT(*) FROM ({dedup_sql}) sub", params
@@ -182,7 +187,8 @@ def api_articles():
                 total = cur.fetchone()["count"]
                 cur.execute(
                     f"SELECT * FROM ({dedup_sql}) sub "
-                    f"ORDER BY {_EFF_SCORE} DESC, {DATE_COL} DESC LIMIT %s OFFSET %s",
+                    f"ORDER BY COALESCE(source_count,1) DESC, {_EFF_SCORE} DESC, {DATE_COL} DESC "
+                    f"LIMIT %s OFFSET %s",
                     params + [per_page, (page - 1) * per_page],
                 )
             else:
@@ -214,39 +220,87 @@ def api_articles():
     return jsonify({"articles": rows, "total": total, "page": page, "per_page": per_page})
 
 
-@app.route("/api/top")
-def api_top():
-    lang  = request.args.get("lang", "").strip()
-    limit = min(int(request.args.get("limit", 10)), 20)
-
-    where_parts = [
-        "fetched_at >= NOW() - INTERVAL '1 day'",
-        "score > 0",
-        "(hidden IS NULL OR hidden = 0)",
-    ]
-    params = []
-    if lang:
-        where_parts.append("lang = %s")
-        params.append(lang)
-
+@app.route("/api/counts")
+def api_counts():
+    """탭 카운트 전용 경량 엔드포인트 — GROUPING SETS로 한 번의 쿼리에
+    전체/언어별 dedup 카운트를 모두 계산 (기존에는 /api/articles 3회 호출)."""
+    where_parts, params = _build_article_filters(request.args, include_lang=False)
     where_clause = " WHERE " + " AND ".join(where_parts)
+
     conn = get_db()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT * FROM articles{where_clause} ORDER BY score DESC LIMIT %s",
-                params + [limit],
+                f"SELECT lang, COUNT(DISTINCT COALESCE(cluster_id, id::text)) AS cnt "
+                f"FROM articles{where_clause} "
+                f"GROUP BY GROUPING SETS ((lang), ())",
+                params,
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    counts = {"all": 0, "ko": 0, "en": 0}
+    for r in rows:
+        key = r["lang"] if r["lang"] else "all"
+        if r["lang"] is None:
+            counts["all"] = r["cnt"]
+        elif key in counts:
+            counts[key] = r["cnt"]
+    return jsonify(counts)
+
+
+@app.route("/api/feedback/<int:article_id>", methods=["POST"])
+def api_feedback(article_id):
+    """사용자 피드백: '관련 없음'(hide) / '복구'(restore).
+    user_feedback이 설정된 기사는 스코어링·AI 분류가 hidden을 덮어쓰지 않는다.
+    피드백 이력은 추후 AI 프롬프트/하드 제외 규칙 개선의 학습 데이터가 된다."""
+    action = (request.get_json(silent=True) or {}).get("action", "")
+    if action not in ("hide", "restore"):
+        return jsonify({"error": "action must be 'hide' or 'restore'"}), 400
+
+    hidden, feedback = (1, -1) if action == "hide" else (0, 1)
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE articles SET hidden=%s, user_feedback=%s WHERE id=%s",
+                (hidden, feedback, article_id),
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "not found"}), 404
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "action": action})
+
+
+@app.route("/api/feed-health")
+def api_feed_health():
+    """피드별 수집 상태. failing = 마지막 실행이 실패한 피드 목록."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM feed_health ORDER BY consecutive_failures DESC, source"
             )
             rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        rows = []
     finally:
         conn.close()
 
     for r in rows:
-        for k in ("published_dt", "fetched_at"):
+        for k in ("last_run_at", "last_success_at"):
             if isinstance(r.get(k), datetime.datetime):
                 r[k] = r[k].isoformat()
-
-    return jsonify(rows)
+    failing = [r for r in rows if r.get("last_status") == "error"]
+    return jsonify({
+        "total": len(rows),
+        "failing_count": len(failing),
+        "failing": failing,
+        "ai_error": _fetch_state.get("last_ai_error"),
+    })
 
 
 @app.route("/api/translate/<int:article_id>", methods=["POST"])
@@ -353,8 +407,10 @@ def api_daily_brief():
         "fetched_at >= DATE_TRUNC('day', NOW()) - INTERVAL '9 hours'",
         "COALESCE(published_dt, fetched_at) >= NOW() - INTERVAL '2 days'",
     ]
+    params = []
     if lang:
-        where_parts.append(f"lang = '{lang}'")
+        where_parts.append("lang = %s")
+        params.append(lang)
 
     where_clause = " WHERE " + " AND ".join(where_parts)
     conn = get_db()
@@ -362,7 +418,8 @@ def api_daily_brief():
         with conn.cursor() as cur:
             cur.execute(
                 f"SELECT title, title_ko, summary, summary_ko, source, lang, score "
-                f"FROM articles{where_clause} ORDER BY score DESC, fetched_at DESC LIMIT 25"
+                f"FROM articles{where_clause} ORDER BY score DESC, fetched_at DESC LIMIT 25",
+                params,
             )
             articles = [dict(r) for r in cur.fetchall()]
     finally:
@@ -424,7 +481,8 @@ def api_debug_overseas():
     return jsonify({"summary": summary, "by_source_48h": by_source})
 
 
-_fetch_state = {"running": False, "last_run": None, "last_saved": None, "last_error": None}
+_fetch_state = {"running": False, "last_run": None, "last_saved": None,
+                "last_error": None, "last_ai_error": None}
 
 
 @app.route("/api/fetch-status")
@@ -456,7 +514,9 @@ def api_trigger_fetch():
             try:
                 from relevance_ai import run_relevance_classification
                 run_relevance_classification(days=3)
+                _fetch_state["last_ai_error"] = None
             except Exception as e:
+                _fetch_state["last_ai_error"] = str(e)[:200]
                 _logging.warning(f"[Trigger] AI 분류 실패: {e}")
 
             now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M KST")
@@ -540,8 +600,10 @@ def _scheduler_loop():
             try:
                 from relevance_ai import run_relevance_classification
                 hidden = run_relevance_classification(days=3)
+                _fetch_state["last_ai_error"] = None
                 _sched_logger.info(f"[Scheduler] AI 분류 완료 - {hidden}건 필터링")
             except Exception as e:
+                _fetch_state["last_ai_error"] = str(e)[:200]
                 _sched_logger.warning(f"[Scheduler] AI 분류 실패: {e}")
 
             now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M KST")

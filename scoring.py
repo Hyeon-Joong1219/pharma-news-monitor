@@ -10,6 +10,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from db import get_db
+from kwmatch import contains_keyword, weighted_score
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,7 @@ def load_config():
 # ── 키워드 스코어 ────────────────────────────────────────────────
 
 def compute_base_score(text: str, weights: dict) -> float:
-    t = text.lower()
-    return sum(w for kw, w in weights.items() if kw.lower() in t)
+    return weighted_score(text, weights)
 
 
 def compute_relevance_score(text: str, source: str,
@@ -63,8 +63,7 @@ def compute_relevance_score(text: str, source: str,
     양수 신호(제약 용어/기업)와 음수 신호(비제약 업종)를 합산.
     전문 제약 매체는 기본 보너스를 부여해 항상 threshold 이상이 되도록 함.
     """
-    t = text.lower()
-    score = sum(w for kw, w in rel_weights.items() if kw.lower() in t)
+    score = weighted_score(text, rel_weights)
     if source in dedicated_sources:
         score += ded_bonus
     return score
@@ -236,7 +235,7 @@ def run_scoring(days: int = 30):
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, title, title_ko, summary, source, fetched_at, published_dt, ai_classified FROM articles WHERE fetched_at >= %s",
+            "SELECT id, title, title_ko, summary, source, fetched_at, published_dt, ai_classified, user_feedback FROM articles WHERE fetched_at >= %s",
             (cutoff,),
         )
         articles = [dict(r) for r in cur.fetchall()]
@@ -265,9 +264,13 @@ def run_scoring(days: int = 30):
         logger.info(f"  [{len(grp)}개 매체] {grp[0]['title'][:60]}  →  {sources}")
 
     # 3단계: 최종 점수 계산 & hidden 판정 & DB 업데이트
-    # ai_classified=1 인 기사: score/cluster만 갱신 — AI가 결정한 hidden 보존
-    # ai_classified=0 인 기사: score/cluster + hidden 모두 갱신 (AI 분류 전 임시 필터)
-    updates_score_only = []   # (score, source_count, cluster_id, relevance_score, id)
+    # ai_classified=1 인 기사: score/cluster만 갱신
+    #   — AI가 결정한 hidden과 relevance_score(0-100)를 모두 보존.
+    #     (과거 여기서 relevance_score를 키워드 점수로 덮어써
+    #      중요도순 복합지표가 왜곡되는 버그가 있었음)
+    # ai_classified=0 인 기사: score/cluster + 키워드 relevance + hidden 갱신
+    #   — 단, 사용자가 직접 숨김/복구한 기사(user_feedback≠0)의 hidden은 보존
+    updates_score_only = []   # (score, source_count, cluster_id, id)
     updates_full       = []   # (score, source_count, cluster_id, relevance_score, hidden, id)
     hidden_cnt = 0
 
@@ -285,8 +288,8 @@ def run_scoring(days: int = 30):
             rel    = round(a["relevance_score"], 2)
 
             if a.get("ai_classified"):
-                # AI가 이미 분류 — hidden 건드리지 않음
-                updates_score_only.append((final, source_count, str(root), rel, a["id"]))
+                # AI가 이미 분류 — hidden/relevance_score 건드리지 않음
+                updates_score_only.append((final, source_count, str(root), a["id"]))
             else:
                 # AI 미분류 — 키워드 기반 임시 필터 적용
                 if a["source"] in dedicated_sources:
@@ -306,7 +309,7 @@ def run_scoring(days: int = 30):
         with conn.cursor() as cur:
             for row in batch:
                 cur.execute(
-                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s WHERE id=%s",
+                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s WHERE id=%s",
                     row,
                 )
         conn.commit()
@@ -317,7 +320,8 @@ def run_scoring(days: int = 30):
         with conn.cursor() as cur:
             for row in batch:
                 cur.execute(
-                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s, hidden=%s WHERE id=%s",
+                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s, "
+                    "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN %s ELSE hidden END WHERE id=%s",
                     row,
                 )
         conn.commit()

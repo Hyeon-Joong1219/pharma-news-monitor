@@ -57,26 +57,28 @@ header h1 { font-size:1.18rem; font-weight:700; }
 /* ── 메인 ── */
 main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 
-/* ── TOP 섹션 ── */
-.top-section { background:#fff; border:1px solid #dde2ea; border-radius:10px; margin-bottom:18px; overflow:hidden; }
-.top-header { padding:11px 18px; display:flex; align-items:center; justify-content:space-between; background:#fafbff; border-bottom:1px solid #edf0f7; cursor:pointer; user-select:none; }
-.top-header h3 { font-size:.92rem; font-weight:700; color:#1a4a7a; display:flex; align-items:center; gap:6px; }
-.top-toggle { font-size:.75rem; color:#aaa; }
-.top-list { padding:6px 0; }
-.top-item { padding:9px 18px; display:flex; align-items:flex-start; gap:10px; border-bottom:1px solid #f2f4f8; transition:background .1s; }
-.top-item:last-child { border-bottom:none; }
-.top-item:hover { background:#f7f9ff; }
-.top-rank { font-size:.8rem; font-weight:800; color:#aaa; min-width:22px; padding-top:2px; }
-.top-rank.r1 { color:#e8a020; }
-.top-rank.r2 { color:#888; }
-.top-rank.r3 { color:#b07040; }
-.top-content { flex:1; min-width:0; }
-.top-title a { font-size:.88rem; font-weight:600; color:#0f2d52; text-decoration:none; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.top-title a:hover { color:#1a4a7a; text-decoration:underline; }
-.top-meta { display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap; }
-.top-source { font-size:.68rem; color:#888; }
-.top-score-icon { font-size:.8rem; }
-.multi-badge { font-size:.67rem; background:#fff3e0; color:#e65100; padding:1px 6px; border-radius:3px; font-weight:700; }
+/* ── 피드 헬스 ── */
+.health-badge { font-size:.72rem; padding:3px 10px; border-radius:12px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.35); color:#fff; cursor:pointer; white-space:nowrap; }
+.health-badge.warn { background:#c0392b; border-color:#e74c3c; font-weight:700; }
+.health-panel { display:none; position:absolute; right:24px; top:52px; z-index:50; width:min(420px,90vw); max-height:60vh; overflow-y:auto; background:#fff; border:1px solid #c8cdd6; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.18); padding:12px 16px; color:#222; }
+.health-panel.show { display:block; }
+.health-panel h4 { font-size:.85rem; color:#1a4a7a; margin-bottom:8px; }
+.health-item { padding:6px 0; border-bottom:1px solid #f0f2f6; font-size:.78rem; }
+.health-item:last-child { border-bottom:none; }
+.health-item .h-name { font-weight:700; color:#c0392b; }
+.health-item .h-err { color:#888; word-break:break-all; }
+.health-item .h-meta { color:#aaa; font-size:.7rem; }
+.health-ok { font-size:.8rem; color:#27ae60; padding:8px 0; }
+
+/* ── 숨김 감사 모드 ── */
+.sort-btn.hidden-toggle.active { background:#7048c5; border-color:#7048c5; }
+.hidden-banner { background:#f3edfd; border:1px solid #d5c5f5; color:#5a35a8; font-size:.8rem; padding:8px 14px; border-radius:8px; margin-bottom:10px; }
+.rel-badge { font-size:.67rem; background:#ede5fc; color:#5a35a8; padding:1px 7px; border-radius:3px; font-weight:700; }
+.btn-feedback { font-size:.7rem; padding:3px 9px; border:1px solid #e0c0c0; border-radius:4px; background:#fdf5f5; color:#a84a4a; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.btn-feedback:hover { background:#f8e0e0; }
+.btn-restore { font-size:.7rem; padding:3px 9px; border:1px solid #b8d4b8; border-radius:4px; background:#f0faf0; color:#2a7a3a; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.btn-restore:hover { background:#d8f0d8; }
+.article-card.fading { opacity:0; transform:translateX(20px); transition:opacity .3s, transform .3s; }
 
 /* ── 결과 정보 ── */
 .result-info { font-size:.8rem; color:#777; margin-bottom:10px; }
@@ -167,13 +169,15 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 </head>
 <body>
 
-<header>
+<header style="position:relative;">
   <h1>💊 제약·바이오 뉴스 모니터</h1>
   <span class="badge">LIVE</span>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
     <span id="fetchStatus" style="font-size:.72rem;color:rgba(255,255,255,.6);"></span>
+    <button class="health-badge" id="healthBadge" onclick="toggleHealthPanel()" style="display:none;"></button>
     <button id="btnFetch" onclick="triggerFetch()" style="font-size:.75rem;padding:5px 13px;border:1px solid rgba(255,255,255,.4);border-radius:6px;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;white-space:nowrap;">🔄 새 기사 가져오기</button>
   </div>
+  <div class="health-panel" id="healthPanel"></div>
 </header>
 
 <!-- 국내/해외 탭 -->
@@ -209,6 +213,7 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
   <span class="sort-label">정렬:</span>
   <button class="sort-btn active" id="sort-date" onclick="setSort('date',this)">최신순</button>
   <button class="sort-btn" id="sort-score" onclick="setSort('score',this)">🔥 중요도순</button>
+  <button class="sort-btn hidden-toggle" id="hiddenToggle" onclick="toggleHiddenMode()" style="margin-left:auto;" title="AI가 걸러낸 기사를 확인하고 잘못 숨겨진 기사를 복구합니다">🙈 숨김 기사 보기</button>
 </div>
 
 <main>
@@ -226,7 +231,7 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
       <div class="brief-body" id="briefBody" style="display:none"><p id="briefText"></p></div>
       <div class="brief-empty" id="briefEmpty" style="display:none">오늘 기사가 충분하지 않아 브리프를 생성할 수 없습니다.</div>
     </div>
-    <div class="brief-footer">
+    <div class="brief-footer" id="briefFooter">
       <button class="btn-brief-refresh" onclick="loadBrief(true)">↻ 재생성</button>
     </div>
   </div>
@@ -241,7 +246,7 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 let currentPage = 1;
 let currentLang = '';
 let currentSort = 'date';
-let topOpen = true;
+let showHidden = false;
 
 // ── 기간 선택 ─────────────────────────────────────
 function onPeriodChange() {
@@ -343,6 +348,7 @@ async function triggerFetch() {
             status.textContent = `✅ ${s.last_saved ?? 0}건 저장 · ${s.last_run ?? ''}`;
             doSearch(1);   // 목록 자동 새로고침
           }
+          loadFeedHealth();
         }
       } catch {}
     }, 4000);
@@ -364,6 +370,52 @@ async function loadFetchStatus() {
     }
   } catch {}
 }
+
+// ── 피드 헬스 ─────────────────────────────────────
+let _healthOpen = false;
+
+async function loadFeedHealth() {
+  try {
+    const h = await (await fetch('/api/feed-health')).json();
+    const badge = document.getElementById('healthBadge');
+    const panel = document.getElementById('healthPanel');
+    const problems = (h.failing_count || 0) + (h.ai_error ? 1 : 0);
+
+    if (h.total === 0 && !h.ai_error) { badge.style.display = 'none'; return; }
+    badge.style.display = '';
+    if (problems > 0) {
+      badge.className = 'health-badge warn';
+      badge.textContent = `⚠️ 피드 ${h.failing_count}개 실패${h.ai_error ? ' · AI 분류 오류' : ''}`;
+    } else {
+      badge.className = 'health-badge';
+      badge.textContent = `✅ 피드 ${h.total}개 정상`;
+    }
+
+    let html = '<h4>피드 수집 상태</h4>';
+    if (h.ai_error) {
+      html += `<div class="health-item"><span class="h-name">🤖 AI 분류 실패</span><div class="h-err">${escapeH(h.ai_error)}</div><div class="h-meta">AI 승인 대기 기사는 키워드 필터로 임시 노출됩니다</div></div>`;
+    }
+    if (h.failing.length) {
+      html += h.failing.map(f => `
+        <div class="health-item">
+          <span class="h-name">${escapeH(f.source)}</span>
+          <span class="h-meta">연속 ${f.consecutive_failures}회 실패</span>
+          <div class="h-err">${escapeH((f.last_error || '').slice(0, 120))}</div>
+          <div class="h-meta">마지막 성공: ${f.last_success_at ? formatDate(f.last_success_at) : '기록 없음'}</div>
+        </div>`).join('');
+    } else if (!h.ai_error) {
+      html += `<div class="health-ok">모든 피드가 정상 수집되고 있습니다.</div>`;
+    }
+    panel.innerHTML = html;
+  } catch {}
+}
+
+function toggleHealthPanel() {
+  _healthOpen = !_healthOpen;
+  document.getElementById('healthPanel').classList.toggle('show', _healthOpen);
+}
+
+function escapeH(s) { return esc(String(s || '')); }
 
 // ── 탭 ───────────────────────────────────────────
 function setLang(btn) {
@@ -391,14 +443,42 @@ async function refreshSourceDropdown() {
   } catch {}
 }
 
-// ── 탭 카운트 ─────────────────────────────────────
+// ── 탭 카운트 (단일 쿼리 엔드포인트) ─────────────────
 async function loadCounts(base) {
-  const ids = { '':'cnt-all', 'ko':'cnt-ko', 'en':'cnt-en' };
-  await Promise.all(Object.entries(ids).map(async ([lang, id]) => {
-    const p = new URLSearchParams(base);
-    if (lang) p.set('lang', lang); p.set('page', 1);
-    try { document.getElementById(id).textContent = (await (await fetch('/api/articles?'+p)).json()).total.toLocaleString(); } catch {}
-  }));
+  try {
+    const c = await (await fetch('/api/counts?' + base)).json();
+    document.getElementById('cnt-all').textContent = (c.all ?? 0).toLocaleString();
+    document.getElementById('cnt-ko').textContent  = (c.ko  ?? 0).toLocaleString();
+    document.getElementById('cnt-en').textContent  = (c.en  ?? 0).toLocaleString();
+  } catch {}
+}
+
+// ── 숨김 감사 모드 ────────────────────────────────
+function toggleHiddenMode() {
+  showHidden = !showHidden;
+  const btn = document.getElementById('hiddenToggle');
+  btn.classList.toggle('active', showHidden);
+  btn.textContent = showHidden ? '🙈 숨김 기사 보는 중 (클릭 시 해제)' : '🙈 숨김 기사 보기';
+  document.getElementById('briefSection').style.display = showHidden ? 'none' : 'block';
+  doSearch(1);
+}
+
+// ── 사용자 피드백 (관련 없음 / 복구) ────────────────
+async function sendFeedback(id, action) {
+  try {
+    const r = await fetch(`/api/feedback/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if (!r.ok) return false;
+    const card = document.getElementById(`card-${id}`);
+    if (card) {
+      card.classList.add('fading');
+      setTimeout(() => card.remove(), 320);
+    }
+    return true;
+  } catch { return false; }
 }
 
 // ── 검색 ─────────────────────────────────────────
@@ -421,6 +501,7 @@ async function doSearch(page) {
   } else if (period) {
     params.set('period', period);
   }
+  if (showHidden) params.set('show_hidden', '1');
 
   showSpinner(true);
   try {
@@ -449,10 +530,14 @@ function renderArticles(data) {
   const isScoreSort = currentSort === 'score';
   const pageOffset  = (data.page - 1) * data.per_page;
 
-  info.innerHTML = data.total > 0
+  const hiddenBanner = showHidden
+    ? `<div class="hidden-banner">🙈 <b>숨김 기사 감사 모드</b> — AI가 비제약으로 판정해 숨긴 기사입니다. 잘못 숨겨진 기사는 ♻️ 복구를 누르면 다시 노출되며, 이후 자동 분류가 덮어쓰지 않습니다.</div>`
+    : '';
+
+  info.innerHTML = hiddenBanner + (data.total > 0
     ? `${chip} 총 <strong>${data.total.toLocaleString()}</strong>개 기사` + (tp > 1 ? ` &nbsp;·&nbsp; ${data.page}/${tp} 페이지` : '')
       + (isScoreSort ? ' &nbsp;<span style="font-size:.78rem;color:#e8a020;font-weight:600">▼ 중요도순</span>' : '')
-    : `${chip} 조건에 맞는 기사가 없습니다.`;
+    : `${chip} 조건에 맞는 기사가 없습니다.`);
 
   if (!data.articles.length) {
     const period = document.getElementById('periodSelect').value;
@@ -483,6 +568,11 @@ function renderArticles(data) {
       ? `<button class="btn-ai-summary" id="aibtn-${a.id}" onclick="aiSummary(${a.id})">🤖 AI 요약</button>` : '';
     const clusterBtn = (a.source_count > 1 && a.cluster_id)
       ? `<button class="btn-cluster" id="cbtn-${a.id}" onclick="toggleCluster(${a.id},'${esc(a.cluster_id)}')">📰 관련 ${a.source_count}개 매체 ▼</button>` : '';
+    const fbBtn = showHidden
+      ? `<button class="btn-restore" onclick="sendFeedback(${a.id},'restore')" title="다시 노출 (자동 분류가 덮어쓰지 않음)">♻️ 복구</button>`
+      : `<button class="btn-feedback" onclick="sendFeedback(${a.id},'hide')" title="관련 없는 기사로 숨김 (자동 분류가 덮어쓰지 않음)">🚫</button>`;
+    const relBadge = (showHidden && a.relevance_score != null)
+      ? `<span class="rel-badge">AI 관련성 ${Math.round(a.relevance_score)}점</span>` : '';
 
     const rank = pageOffset + idx + 1;
     const rankBadge = isScoreSort
@@ -500,6 +590,7 @@ function renderArticles(data) {
           <span class="source-badge">${esc(a.source)}</span>
           ${icon ? `<span class="score-icon">${icon}</span>` : ''}
           ${multi}
+          ${relBadge}
           <span class="article-date">${date}</span>
         </div>
         <div class="article-title">
@@ -513,6 +604,7 @@ function renderArticles(data) {
           ${clusterBtn}
           ${transBtn}
           ${aiBtn}
+          ${fbBtn}
         </div>
         <div id="ai-box-${a.id}" style="display:none"></div>
         <div id="cluster-panel-${a.id}" class="cluster-panel" style="display:none"></div>
@@ -704,6 +796,7 @@ refreshSourceDropdown();
 doSearch(1);
 loadBrief(false);
 loadFetchStatus();
+loadFeedHealth();
 </script>
 </body>
 </html>

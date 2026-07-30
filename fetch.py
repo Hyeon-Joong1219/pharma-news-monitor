@@ -1,5 +1,6 @@
 import os
 import yaml
+import base64
 import hashlib
 import feedparser
 import datetime
@@ -12,8 +13,16 @@ import urllib3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
 from db import get_db, init_db
+from kwmatch import match_keywords, weighted_score
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Windows 콘솔/리다이렉트가 CP949로 잡혀 로그가 깨지는 문제 방지
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,21 +71,65 @@ def compute_hash(title: str, link: str) -> str:
 
 
 def normalize_date(raw: str) -> str:
+    """발행일 문자열을 naive-UTC ISO 형식으로 정규화.
+
+    RSS 날짜에 타임존(+0900 등)이 있으면 UTC로 변환 후 tzinfo를 제거한다.
+    DB의 published_dt/fetched_at이 모두 naive-UTC로 통일되어야
+    30일 컷오프·시간감쇠·'오늘' 필터가 정확해진다.
+    (과거에는 KST 벽시계 시각이 그대로 저장돼 최대 9시간 오차가 있었음)
+    """
     if not raw:
         return ""
     raw = raw.strip()
     try:
         dt = parsedate_to_datetime(raw)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
         return dt.strftime("%Y-%m-%dT%H:%M:%S")
     except Exception:
         pass
-    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d",
-                "%Y/%m/%d %H:%M:%S", "%Y/%m/%d"]:
+    # ISO 8601 (타임존 오프셋/Z 포함) — 기존 raw[:len(fmt)] 방식은 %Y가
+    # 값(4자)보다 짧아 항상 잘못 잘려 ISO 날짜 파싱이 전부 실패하던 버그가 있었음
+    try:
+        dt = datetime.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+    except Exception:
+        pass
+    for fmt, ln in [("%Y-%m-%d %H:%M:%S", 19), ("%Y/%m/%d %H:%M:%S", 19),
+                    ("%Y-%m-%d", 10), ("%Y/%m/%d", 10)]:
         try:
-            return datetime.datetime.strptime(raw[:len(fmt)], fmt).strftime("%Y-%m-%dT%H:%M:%S")
+            return datetime.datetime.strptime(raw[:ln], fmt).strftime("%Y-%m-%dT%H:%M:%S")
         except Exception:
             continue
     return ""
+
+
+# ── Google News 링크 디코딩 ──────────────────────────────────────
+# Google News RSS 링크(news.google.com/rss/articles/...)의 article id를
+# base64 디코딩하면 구형 포맷은 원문 URL이 그대로 들어 있다.
+# 신형 포맷(AU_yqL...)은 정적 디코딩이 불가능하므로 원본 링크를 유지한다
+# (실패해도 무해한 best-effort).
+_GNEWS_RE = re.compile(r"news\.google\.com/(?:rss/articles|articles)/([^?/]+)")
+_URL_IN_BYTES_RE = re.compile(rb"https?://[\x21-\x7e]+")
+
+
+def decode_gnews_url(url: str) -> str:
+    m = _GNEWS_RE.search(url or "")
+    if not m:
+        return url
+    try:
+        data = base64.urlsafe_b64decode(m.group(1) + "===")
+        m2 = _URL_IN_BYTES_RE.search(data)
+        if m2:
+            decoded = m2.group(0).decode("ascii", "ignore")
+            # protobuf 잔여 바이트가 URL 끝에 붙는 경우 방어
+            if decoded.startswith("http") and "." in decoded[:40]:
+                return decoded
+    except Exception:
+        pass
+    return url
 
 
 # ── 설정 로드 ────────────────────────────────────────────────────
@@ -94,16 +147,10 @@ def load_config():
     return feeds, topic_kws, entity_kws, rel_weights
 
 
-def match_keywords(text: str, keywords: list) -> list:
-    t = text.lower()
-    return [kw for kw in keywords if kw in t]
-
-
 def _quick_relevance(text: str, rel_weights: dict) -> float:
     """scoring.yaml relevance_weights로 빠른 관련성 점수 계산.
     Dedicated 피드 pre-filter 전용 — 강한 음수(-5 이하)이면 비제약 기사."""
-    t = text.lower()
-    return sum(w for kw, w in rel_weights.items() if kw.lower() in t)
+    return weighted_score(text, rel_weights)
 
 
 # ── 단일 피드 수집 (스레드 단위) ─────────────────────────────────
@@ -137,7 +184,7 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
 
         for entry in parsed.entries:
             title     = strip_html((entry.get("title") or "").strip())
-            link      = (entry.get("link") or "").strip()
+            link      = decode_gnews_url((entry.get("link") or "").strip())
             summary   = strip_html((entry.get("summary") or entry.get("description") or "").strip())
             published = (entry.get("published") or entry.get("updated") or "").strip()
 
@@ -215,6 +262,14 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
             try:
                 for row in rows_to_insert:
                     with conn.cursor() as cur:
+                        # hash는 title|link 기반이라 링크 형식이 바뀌면(예: Google News
+                        # 디코딩 도입) 같은 기사가 재저장될 수 있음 → 제목+소스로 2차 방어
+                        cur.execute(
+                            "SELECT 1 FROM articles WHERE source=%s AND title=%s LIMIT 1",
+                            (row[2], row[0]),
+                        )
+                        if cur.fetchone():
+                            continue
                         cur.execute(
                             """INSERT INTO articles
                                (title, link, source, published, published_dt, summary, keywords,
@@ -247,6 +302,44 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
         return ({"name": name, "status": "error", "error": str(e)}, 0)
 
 
+# ── 피드 헬스 기록 ────────────────────────────────────────────────
+
+def _record_feed_health(results: list):
+    """피드별 수집 성공/실패 이력을 feed_health 테이블에 upsert.
+    연속 실패 카운트로 죽은 피드를 대시보드에서 감지할 수 있게 한다."""
+    try:
+        conn = get_db()
+        now = datetime.datetime.utcnow()
+        with conn.cursor() as cur:
+            for r in results:
+                ok = r.get("status") == "ok"
+                cur.execute(
+                    """INSERT INTO feed_health
+                         (source, last_status, last_error, last_run_at,
+                          last_success_at, consecutive_failures, last_saved)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (source) DO UPDATE SET
+                         last_status          = EXCLUDED.last_status,
+                         last_error           = EXCLUDED.last_error,
+                         last_run_at          = EXCLUDED.last_run_at,
+                         last_success_at      = COALESCE(EXCLUDED.last_success_at,
+                                                         feed_health.last_success_at),
+                         consecutive_failures = CASE WHEN EXCLUDED.last_status = 'ok'
+                                                     THEN 0
+                                                     ELSE feed_health.consecutive_failures + 1 END,
+                         last_saved           = COALESCE(EXCLUDED.last_saved,
+                                                         feed_health.last_saved)""",
+                    (r["name"], "ok" if ok else "error",
+                     (r.get("error") or "")[:500] or None, now,
+                     now if ok else None, 0 if ok else 1,
+                     r.get("saved") if ok else None),
+                )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"feed_health 기록 실패 (무시): {e}")
+
+
 # ── 메인 수집 ────────────────────────────────────────────────────
 
 def fetch_feeds():
@@ -275,6 +368,7 @@ def fetch_feeds():
             results.append(result)
             total_saved += saved
 
+    _record_feed_health(results)
     return results, total_saved
 
 
