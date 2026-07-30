@@ -70,6 +70,23 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 .health-item .h-meta { color:#aaa; font-size:.7rem; }
 .health-ok { font-size:.8rem; color:#27ae60; padding:8px 0; }
 
+/* ── 워치리스트 / 스크랩 ── */
+.sort-btn.watch-toggle.active { background:#e8a020; border-color:#e8a020; color:#fff; font-weight:700; }
+.sort-btn.scrap-toggle.active { background:#2a7a3a; border-color:#2a7a3a; color:#fff; font-weight:700; }
+.watch-badge { font-size:.67rem; background:#fff3d6; color:#9a6a00; padding:1px 7px; border-radius:3px; font-weight:700; border:1px solid #f0d090; }
+.btn-scrap { font-size:.95rem; background:none; border:none; cursor:pointer; padding:0 2px; color:#c8cdd6; flex-shrink:0; line-height:1; }
+.btn-scrap.on { color:#e8a020; }
+.btn-scrap:hover { color:#e8a020; }
+.watch-panel { display:none; background:#fffdf5; border-bottom:1px solid #eadfc0; padding:10px 24px; flex-wrap:wrap; gap:7px; align-items:center; }
+.watch-panel.show { display:flex; }
+.watch-panel .wp-label { font-size:.78rem; color:#9a7a30; font-weight:700; margin-right:4px; }
+.watch-chip { display:inline-flex; align-items:center; gap:6px; background:#fff3d6; border:1px solid #eed9a0; color:#7a5500; font-size:.78rem; padding:3px 10px; border-radius:13px; font-weight:600; }
+.watch-chip button { border:none; background:none; cursor:pointer; color:#b09050; font-weight:800; padding:0; font-size:.8rem; }
+.watch-chip button:hover { color:#c0392b; }
+.watch-panel input { padding:5px 10px; border:1px solid #d0c8b0; border-radius:6px; font-size:.8rem; width:170px; outline:none; background:#fff; }
+.watch-panel .wp-add { font-size:.75rem; padding:5px 12px; border:1px solid #e8a020; border-radius:6px; background:#f5c860; color:#5a4000; cursor:pointer; font-weight:700; }
+.watch-panel .wp-empty { font-size:.76rem; color:#b0a080; }
+
 /* ── 숨김 감사 모드 ── */
 .sort-btn.hidden-toggle.active { background:#7048c5; border-color:#7048c5; }
 .hidden-banner { background:#f3edfd; border:1px solid #d5c5f5; color:#5a35a8; font-size:.8rem; padding:8px 14px; border-radius:8px; margin-bottom:10px; }
@@ -213,7 +230,19 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
   <span class="sort-label">정렬:</span>
   <button class="sort-btn active" id="sort-date" onclick="setSort('date',this)">최신순</button>
   <button class="sort-btn" id="sort-score" onclick="setSort('score',this)">🔥 중요도순</button>
+  <span style="width:10px"></span>
+  <button class="sort-btn watch-toggle" id="watchToggle" onclick="toggleWatchMode()" title="워치리스트 키워드가 포함된 기사만 표시">⭐ 워치리스트</button>
+  <button class="sort-btn" id="watchManageBtn" onclick="toggleWatchPanel()" title="워치리스트 키워드 관리">⚙</button>
+  <button class="sort-btn scrap-toggle" id="scrapToggle" onclick="toggleScrapMode()" title="스크랩(★)한 기사만 표시">📌 스크랩</button>
   <button class="sort-btn hidden-toggle" id="hiddenToggle" onclick="toggleHiddenMode()" style="margin-left:auto;" title="AI가 걸러낸 기사를 확인하고 잘못 숨겨진 기사를 복구합니다">🙈 숨김 기사 보기</button>
+</div>
+
+<!-- 워치리스트 관리 패널 -->
+<div class="watch-panel" id="watchPanel">
+  <span class="wp-label">⭐ 관심 키워드:</span>
+  <span id="watchChips"><span class="wp-empty">불러오는 중…</span></span>
+  <input type="text" id="watchInput" placeholder="키워드 추가 (예: ADC, 비만치료제)" />
+  <button class="wp-add" onclick="addWatchKeyword()">추가</button>
 </div>
 
 <main>
@@ -247,6 +276,34 @@ let currentPage = 1;
 let currentLang = '';
 let currentSort = 'date';
 let showHidden = false;
+let watchOnly  = false;
+let scrapOnly  = false;
+
+// ── 보기 모드 (워치리스트/스크랩/숨김은 상호 배타) ───
+function syncModeButtons() {
+  const w = document.getElementById('watchToggle');
+  const s = document.getElementById('scrapToggle');
+  const h = document.getElementById('hiddenToggle');
+  w.classList.toggle('active', watchOnly);
+  s.classList.toggle('active', scrapOnly);
+  h.classList.toggle('active', showHidden);
+  h.textContent = showHidden ? '🙈 숨김 기사 보는 중 (클릭 시 해제)' : '🙈 숨김 기사 보기';
+  document.getElementById('briefSection').style.display = (showHidden || scrapOnly) ? 'none' : 'block';
+}
+
+function toggleWatchMode() {
+  watchOnly = !watchOnly;
+  if (watchOnly) { scrapOnly = false; showHidden = false; }
+  syncModeButtons();
+  doSearch(1);
+}
+
+function toggleScrapMode() {
+  scrapOnly = !scrapOnly;
+  if (scrapOnly) { watchOnly = false; showHidden = false; }
+  syncModeButtons();
+  doSearch(1);
+}
 
 // ── 기간 선택 ─────────────────────────────────────
 function onPeriodChange() {
@@ -456,11 +513,82 @@ async function loadCounts(base) {
 // ── 숨김 감사 모드 ────────────────────────────────
 function toggleHiddenMode() {
   showHidden = !showHidden;
-  const btn = document.getElementById('hiddenToggle');
-  btn.classList.toggle('active', showHidden);
-  btn.textContent = showHidden ? '🙈 숨김 기사 보는 중 (클릭 시 해제)' : '🙈 숨김 기사 보기';
-  document.getElementById('briefSection').style.display = showHidden ? 'none' : 'block';
+  if (showHidden) { watchOnly = false; scrapOnly = false; }
+  syncModeButtons();
   doSearch(1);
+}
+
+// ── 워치리스트 관리 ───────────────────────────────
+let _watchPanelOpen = false;
+
+function toggleWatchPanel() {
+  _watchPanelOpen = !_watchPanelOpen;
+  document.getElementById('watchPanel').classList.toggle('show', _watchPanelOpen);
+  if (_watchPanelOpen) loadWatchlist();
+}
+
+async function loadWatchlist() {
+  const box = document.getElementById('watchChips');
+  try {
+    const rows = await (await fetch('/api/watchlist')).json();
+    box.innerHTML = rows.length
+      ? rows.map(r => `<span class="watch-chip">${esc(r.keyword)}<button onclick="delWatchKeyword(${r.id})" title="삭제">✕</button></span>`).join(' ')
+      : '<span class="wp-empty">등록된 키워드가 없습니다. 회사명·기술(예: ADC, CDMO, 비만치료제)을 추가해 보세요.</span>';
+  } catch {
+    box.innerHTML = '<span class="wp-empty">불러오기 실패</span>';
+  }
+}
+
+async function addWatchKeyword() {
+  const input = document.getElementById('watchInput');
+  const kw = input.value.trim();
+  if (!kw) return;
+  try {
+    await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword: kw }),
+    });
+    input.value = '';
+    await loadWatchlist();
+    doSearch(currentPage);   // ⭐ 배지 갱신
+  } catch {}
+}
+
+async function delWatchKeyword(id) {
+  try {
+    await fetch(`/api/watchlist/${id}`, { method: 'DELETE' });
+    await loadWatchlist();
+    doSearch(currentPage);
+  } catch {}
+}
+
+// ── 스크랩 (localStorage) ─────────────────────────
+const _SCRAP_KEY = 'pharma_scrap_v1';
+
+function getScrapIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(_SCRAP_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function isScrapped(id) { return getScrapIds().has(String(id)); }
+
+function toggleScrapId(id, btn) {
+  const ids = getScrapIds();
+  const key = String(id);
+  if (ids.has(key)) { ids.delete(key); }
+  else { ids.add(key); }
+  localStorage.setItem(_SCRAP_KEY, JSON.stringify([...ids].slice(-300)));
+  if (btn) {
+    const on = ids.has(key);
+    btn.classList.toggle('on', on);
+    btn.textContent = on ? '★' : '☆';
+  }
+  // 스크랩 보기 중 해제하면 목록에서 제거
+  if (scrapOnly && !ids.has(key)) {
+    const card = document.getElementById(`card-${id}`);
+    if (card) { card.classList.add('fading'); setTimeout(() => card.remove(), 320); }
+  }
 }
 
 // ── 사용자 피드백 (관련 없음 / 복구) ────────────────
@@ -501,7 +629,21 @@ async function doSearch(page) {
   } else if (period) {
     params.set('period', period);
   }
-  if (showHidden) params.set('show_hidden', '1');
+
+  if (scrapOnly) {
+    const ids = [...getScrapIds()];
+    if (!ids.length) {
+      document.getElementById('resultInfo').innerHTML = '';
+      document.getElementById('articleList').innerHTML =
+        '<div class="empty-state"><div class="icon">📌</div><p>스크랩한 기사가 없습니다.<br>기사 카드의 ☆를 눌러 저장해 보세요.</p></div>';
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
+    params.set('ids', ids.slice(-300).join(','));
+  } else {
+    if (watchOnly)  params.set('watch', '1');
+    if (showHidden) params.set('show_hidden', '1');
+  }
 
   showSpinner(true);
   try {
@@ -573,6 +715,10 @@ function renderArticles(data) {
       : `<button class="btn-feedback" onclick="sendFeedback(${a.id},'hide')" title="관련 없는 기사로 숨김 (자동 분류가 덮어쓰지 않음)">🚫</button>`;
     const relBadge = (showHidden && a.relevance_score != null)
       ? `<span class="rel-badge">AI 관련성 ${Math.round(a.relevance_score)}점</span>` : '';
+    const watchBadge = (a.watch_hits && a.watch_hits.length)
+      ? `<span class="watch-badge" title="워치리스트 매칭">⭐ ${esc(a.watch_hits.slice(0,3).join(', '))}</span>` : '';
+    const scrapOn  = isScrapped(a.id);
+    const scrapBtn = `<button class="btn-scrap ${scrapOn?'on':''}" onclick="toggleScrapId(${a.id}, this)" title="스크랩">${scrapOn?'★':'☆'}</button>`;
 
     const rank = pageOffset + idx + 1;
     const rankBadge = isScoreSort
@@ -590,8 +736,10 @@ function renderArticles(data) {
           <span class="source-badge">${esc(a.source)}</span>
           ${icon ? `<span class="score-icon">${icon}</span>` : ''}
           ${multi}
+          ${watchBadge}
           ${relBadge}
           <span class="article-date">${date}</span>
+          ${scrapBtn}
         </div>
         <div class="article-title">
           <a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer" id="title-${a.id}"
@@ -792,6 +940,7 @@ async function toggleCluster(articleId, clusterId) {
 }
 
 document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(1); });
+document.getElementById('watchInput').addEventListener('keydown', e => { if (e.key==='Enter') addWatchKeyword(); });
 refreshSourceDropdown();
 doSearch(1);
 loadBrief(false);

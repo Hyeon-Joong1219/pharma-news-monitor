@@ -10,8 +10,31 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from flask import Flask, jsonify, render_template, request
 from db import get_db, init_db
+from kwmatch import contains_keyword
 
 _brief_cache: dict = {}
+
+# 워치리스트 키워드 캐시 (60초 TTL — articles/counts 연속 호출 시 중복 쿼리 방지)
+_watchlist_cache = {"kws": [], "ts": 0.0}
+
+
+def _load_watchlist_keywords() -> list:
+    if time.time() - _watchlist_cache["ts"] < 60:
+        return _watchlist_cache["kws"]
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT keyword FROM watchlist ORDER BY keyword")
+            kws = [r["keyword"] for r in cur.fetchall()]
+        conn.close()
+    except Exception:
+        kws = _watchlist_cache["kws"]
+    _watchlist_cache.update({"kws": kws, "ts": time.time()})
+    return kws
+
+
+def _invalidate_watchlist_cache():
+    _watchlist_cache["ts"] = 0.0
 
 
 def _load_groq_key() -> str:
@@ -95,9 +118,29 @@ def _build_article_filters(args, include_lang=True):
     sort        = args.get("sort", "date")
     show_hidden = args.get("show_hidden", "0") == "1"
 
+    # 스크랩 보기: 사용자가 저장한 기사 ID 목록만 직접 조회
+    # (사용자가 명시적으로 저장한 기사이므로 hidden/기간 필터 미적용)
+    ids_raw = args.get("ids", "").strip()
+    if ids_raw:
+        id_list = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()][:300]
+        return ["id = ANY(%s)"], [id_list]
+
     # show_hidden=1: 숨김 기사만 표시 (AI 필터 감사용)
     where_parts = ["hidden = 1"] if show_hidden else ["(hidden IS NULL OR hidden = 0)"]
     params = []
+
+    # 워치리스트만 보기 (SQL은 ILIKE 광역 매칭 — 정밀 배지는 kwmatch로 별도 계산)
+    if args.get("watch", "0") == "1":
+        watch_kws = _load_watchlist_keywords()
+        if watch_kws:
+            ors = []
+            for kw in watch_kws:
+                like = f"%{kw}%"
+                ors.append("(title ILIKE %s OR title_ko ILIKE %s OR summary ILIKE %s OR keywords ILIKE %s)")
+                params += [like] * 4
+            where_parts.append("(" + " OR ".join(ors) + ")")
+        else:
+            where_parts.append("FALSE")   # 워치리스트 비어있으면 결과 없음
 
     if q:
         where_parts.append(
@@ -217,6 +260,16 @@ def api_articles():
             if isinstance(r.get(k), datetime.datetime):
                 r[k] = r[k].isoformat()
 
+    # 워치리스트 매칭 어노테이션 (정밀 단어경계 매칭 — ⭐ 배지용)
+    watch_kws = _load_watchlist_keywords()
+    if watch_kws:
+        for r in rows:
+            text = " ".join(filter(None, [r.get("title"), r.get("title_ko"),
+                                          r.get("summary"), r.get("keywords")])).lower()
+            hits = [kw for kw in watch_kws if contains_keyword(text, kw.lower())]
+            if hits:
+                r["watch_hits"] = hits
+
     return jsonify({"articles": rows, "total": total, "page": page, "per_page": per_page})
 
 
@@ -273,6 +326,45 @@ def api_feedback(article_id):
     finally:
         conn.close()
     return jsonify({"ok": True, "action": action})
+
+
+@app.route("/api/watchlist", methods=["GET", "POST"])
+def api_watchlist():
+    """워치리스트 키워드 조회/추가."""
+    conn = get_db()
+    try:
+        if request.method == "POST":
+            kw = ((request.get_json(silent=True) or {}).get("keyword") or "").strip()
+            if not kw or len(kw) > 60:
+                return jsonify({"error": "keyword must be 1-60 chars"}), 400
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO watchlist (keyword) VALUES (%s) "
+                    "ON CONFLICT (keyword) DO NOTHING",
+                    (kw,),
+                )
+            conn.commit()
+            _invalidate_watchlist_cache()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, keyword FROM watchlist ORDER BY keyword")
+            rows = [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+    return jsonify(rows)
+
+
+@app.route("/api/watchlist/<int:wid>", methods=["DELETE"])
+def api_watchlist_delete(wid):
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM watchlist WHERE id=%s", (wid,))
+            deleted = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    _invalidate_watchlist_cache()
+    return jsonify({"ok": bool(deleted)})
 
 
 @app.route("/api/feed-health")

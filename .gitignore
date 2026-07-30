@@ -12,3 +12,6 @@ source_manager_log.txt
 check_today.py
 debug_today.py
 task_*.xml
+backups/
+.claude/
+source_analysis.txt

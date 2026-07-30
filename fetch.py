@@ -44,6 +44,32 @@ _MIN_BODY_LEN = 30
 
 # ── 번역 ────────────────────────────────────────────────────────
 
+def _translate_groq(text: str) -> str:
+    """Groq 폴백 번역 — Google 비공식 endpoint 장애 시 2중화."""
+    try:
+        from groq import Groq
+        from relevance_ai import _load_api_key
+        key = _load_api_key()
+        if not key:
+            return ""
+        resp = Groq(api_key=key).chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Translate the following pharma/biotech news text into natural Korean. "
+                    "Output ONLY the Korean translation, nothing else.\n\n" + text[:800]
+                ),
+            }],
+            max_tokens=600,
+            temperature=0,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        logger.debug(f"Groq 폴백 번역 실패: {e}")
+        return ""
+
+
 def translate_to_ko(text: str, timeout: int = 8) -> str:
     if not text or not text.strip():
         return ""
@@ -51,10 +77,12 @@ def translate_to_ko(text: str, timeout: int = 8) -> str:
         params = {"client": "gtx", "sl": "en", "tl": "ko", "dt": "t", "q": text[:800]}
         r = requests.get(_TRANSLATE_URL, params=params, verify=False, timeout=timeout)
         r.raise_for_status()
-        return "".join(seg[0] for seg in r.json()[0] if seg[0])
+        result = "".join(seg[0] for seg in r.json()[0] if seg[0])
+        if result.strip():
+            return result
     except Exception as e:
-        logger.debug(f"번역 실패: {e}")
-        return ""
+        logger.debug(f"Google 번역 실패, Groq 폴백 시도: {e}")
+    return _translate_groq(text)
 
 
 # ── 유틸 ─────────────────────────────────────────────────────────

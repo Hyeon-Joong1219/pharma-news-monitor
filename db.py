@@ -57,6 +57,14 @@ def init_db():
         # 사용자 피드백: 0=없음, -1=사용자가 '관련 없음' 처리, 1=사용자가 복구
         # user_feedback != 0 인 기사의 hidden은 자동 파이프라인이 덮어쓰지 않음
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS user_feedback INTEGER DEFAULT 0")
+        # 사용자 관심 워치리스트 키워드
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id         SERIAL PRIMARY KEY,
+                keyword    TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """)
         # 피드별 수집 상태 (fetch.py가 매 실행 upsert)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS feed_health (
