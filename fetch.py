@@ -53,7 +53,7 @@ def _translate_groq(text: str) -> str:
         if not key:
             return ""
         resp = Groq(api_key=key).chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
             messages=[{
                 "role": "user",
                 "content": (
@@ -61,10 +61,11 @@ def _translate_groq(text: str) -> str:
                     "Output ONLY the Korean translation, nothing else.\n\n" + text[:800]
                 ),
             }],
-            max_tokens=600,
+            max_tokens=900,
             temperature=0,
+            reasoning_effort="low",
         )
-        return resp.choices[0].message.content.strip()
+        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         logger.debug(f"Groq 폴백 번역 실패: {e}")
         return ""

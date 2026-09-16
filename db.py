@@ -1,4 +1,16 @@
 import os
+
+# 회사 프록시(SSL 검사)가 자체 루트 인증서로 트래픽을 가로채 Python의 certifi
+# 인증서 저장소로는 검증에 실패함 (CERTIFICATE_VERIFY_FAILED: self-signed
+# certificate in certificate chain). truststore로 OS(Windows) 인증서 저장소를
+# 사용하도록 전역 패치 — Groq/번역 등 모든 외부 HTTPS 호출에 적용됨.
+# db 모듈이 가장 먼저 임포트되므로 여기서 한 번만 적용한다.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 

@@ -119,15 +119,20 @@ def ai_suggestions(hidden, restored):
     )
     try:
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=900,
+            max_tokens=1600,
             temperature=0.2,
+            reasoning_effort="low",
         )
+        content = (resp.choices[0].message.content or "").strip()
+        if not content:
+            print("\n[AI 제안 실패] 모델이 빈 응답을 반환했습니다.")
+            return
         print("\n" + "=" * 62)
         print("  [AI 개선 제안]  (검토 후 수동 반영 권장)")
         print("=" * 62)
-        print(resp.choices[0].message.content.strip())
+        print(content)
     except Exception as e:
         print(f"\n[AI 제안 실패] {e}")
 

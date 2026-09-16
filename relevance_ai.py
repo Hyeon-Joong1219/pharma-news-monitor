@@ -101,7 +101,7 @@ def _hard_exclude(article: dict) -> bool:
                 return True
     return False
 BACKFILL_LIMIT        = 200  # 미분류(ai_classified=0) 기사 한 번에 재처리 최대 건수
-MODEL                 = "llama-3.1-8b-instant"
+MODEL                 = "openai/gpt-oss-20b"
 
 
 def _load_api_key() -> str:
@@ -221,13 +221,21 @@ def _classify_batch(client, articles: list) -> dict:
     )
 
     try:
+        # gpt-oss-20b는 추론 모델 — max_tokens가 낮으면 보이지 않는 추론 토큰만
+        # 소비하고 content가 빈 문자열로 반환되어(finish_reason=length) 배치
+        # 전체가 미분류로 남는 문제가 있었음. reasoning_effort를 낮추고
+        # max_tokens를 15건 배치 기준 충분히 크게 잡는다.
         resp = client.chat.completions.create(
             model=MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
+            max_tokens=1200,
             temperature=0,
+            reasoning_effort="low",
         )
-        raw = resp.choices[0].message.content.strip()
+        raw = (resp.choices[0].message.content or "").strip()
+        if not raw:
+            logger.warning("Groq 분류 실패 (배치): 빈 응답")
+            return {}
         # 마크다운 코드블록 제거
         if raw.startswith("```"):
             raw = "\n".join(raw.split("\n")[1:])

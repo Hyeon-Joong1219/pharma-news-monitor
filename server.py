@@ -78,15 +78,24 @@ def _generate_brief(articles: list, lang: str) -> str:
         "- Write in natural, modern Korean — avoid Chinese characters (漢字) or archaic Sino-Korean terms like 里程碑, 契機, 趨勢. Use plain Korean equivalents instead (e.g. 이정표→중요한 발걸음, 계기→기회, 추세→흐름)\n\n"
         "Today's articles:\n" + "\n".join(lines)
     )
-    try:
-        resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=600, temperature=0.4,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        return f"브리프 생성 실패: {e}"
+    # gpt-oss 계열은 추론(reasoning) 모델이라 답변 전에 보이지 않는 "추론 토큰"을
+    # 먼저 소비한다. max_tokens가 낮으면 추론만 하다 끝나 content가 빈 문자열로
+    # 돌아오는 경우가 있어(finish_reason=length), reasoning_effort를 낮추고
+    # max_tokens를 넉넉히 준다. 그래도 비어 있으면 한 번 재시도한다.
+    for attempt in range(2):
+        try:
+            resp = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1500, temperature=0.4,
+                reasoning_effort="low",
+            )
+            content = (resp.choices[0].message.content or "").strip()
+            if content:
+                return content
+        except Exception as e:
+            return f"브리프 생성 실패: {e}"
+    return "브리프 생성 실패: 모델이 빈 응답을 반환했습니다. 잠시 후 다시 시도해주세요."
 
 
 # 번역은 fetch.py 구현을 재사용 (중복 제거)
@@ -465,14 +474,18 @@ def ai_summary(article_id):
             "Korean summary (2-3 sentences only):"
         )
         try:
-            client = Groq(api_key=api_key)
-            resp   = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+            client  = Groq(api_key=api_key)
+            resp    = client.chat.completions.create(
+                model="openai/gpt-oss-20b",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=350,
+                max_tokens=900,
                 temperature=0.15,
+                reasoning_effort="low",
             )
-            ko = "【AI】" + resp.choices[0].message.content.strip()
+            content = (resp.choices[0].message.content or "").strip()
+            if not content:
+                return jsonify({"error": "모델이 빈 응답을 반환했습니다. 다시 시도해주세요."}), 502
+            ko = "【AI】" + content
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE articles SET summary_ko = %s WHERE id = %s", (ko, article_id)
@@ -496,7 +509,10 @@ def api_daily_brief():
 
     where_parts = [
         "(hidden IS NULL OR hidden = 0)",
-        "fetched_at >= DATE_TRUNC('day', NOW()) - INTERVAL '9 hours'",
+        # KST 자정 계산: NOW()를 먼저 +9h 시프트한 뒤 자정으로 절삭해야 정확함.
+        # (절삭 후 -9h를 하면 UTC 15~24시(=KST 00~09시) 구간에서 하루 전 자정으로
+        #  잘못 계산되어 "오늘" 브리프에 어제 기사가 섞이는 버그가 있었음)
+        "fetched_at >= DATE_TRUNC('day', NOW() + INTERVAL '9 hours') - INTERVAL '9 hours'",
         "COALESCE(published_dt, fetched_at) >= NOW() - INTERVAL '2 days'",
     ]
     params = []
@@ -523,7 +539,9 @@ def api_daily_brief():
     brief   = _generate_brief(articles, lang)
     now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%H:%M")
     payload = {"brief": brief, "generated_at": now_kst, "article_count": len(articles), "ts": time.time()}
-    _brief_cache[lang] = payload
+    # 생성 실패 시에는 캐시하지 않음 — 실패한 응답이 1시간 동안 고정 노출되는 것을 방지
+    if brief and "생성 실패" not in brief:
+        _brief_cache[lang] = payload
     return jsonify({k: v for k, v in payload.items() if k != "ts"})
 
 
