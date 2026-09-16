@@ -325,10 +325,12 @@ feeds:
     lang: en
     dedicated: true
 
-  - name: Labiotech
-    url: https://labiotech.eu/feed/
-    lang: en
-    dedicated: true
+  # Labiotech: Cloudflare 봇 차단(403 "Just a moment...")으로 2026-07-30 이후
+  # RSS 수집 불가 — 우회하려면 헤드리스 브라우저 필요, 비활성화 처리
+  # - name: Labiotech
+  #   url: https://labiotech.eu/feed/
+  #   lang: en
+  #   dedicated: true
 
   - name: Drug Discovery Today
     url: https://rss.sciencedirect.com/publication/science/13596446
