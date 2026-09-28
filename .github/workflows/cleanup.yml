@@ -38,12 +38,15 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python scoring.py 30
 
-      - name: Re-classify relevance (force, 7 days)
+      # 미분류 기사만 분류 (--force 제거).
+      # 매일 7일치 전체를 재분류하면 Groq 무료 한도(하루 20만 토큰)를 초과해
+      # 정작 새 기사 분류가 429로 실패했음 (2026-09-28 확인).
+      - name: Classify unclassified articles (7 days)
         timeout-minutes: 35
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python relevance_ai.py 7 --force
+        run: python relevance_ai.py 7
 
       # GitHub은 저장소에 60일간 커밋이 없으면 예약(schedule) 워크플로를 자동
       # 비활성화한다(disabled_inactivity). 2026-09 실제로 이 때문에 수집이 멈추고
