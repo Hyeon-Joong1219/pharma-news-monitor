@@ -281,12 +281,14 @@ feeds:
   # [글로벌 Tier-1] 제약/바이오 전문지 — dedicated: true
   # ══════════════════════════════════════════════════════════════
   - name: FiercePharma
-    url: https://www.fiercepharma.com/rss/xml
+    # 직접 RSS는 Cloudflare 봇 차단(403)으로 2026-09-16 이후 수집 불가 → Google News 경유
+    url: https://news.google.com/rss/search?q=site:fiercepharma.com&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: true
 
   - name: FierceBiotech
-    url: https://www.fiercebiotech.com/rss/xml
+    # 직접 RSS는 Cloudflare 봇 차단(403)으로 2026-09-16 이후 수집 불가 → Google News 경유
+    url: https://news.google.com/rss/search?q=site:fiercebiotech.com&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: true
 
