@@ -28,12 +28,38 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    # connect_timeout: DB가 응답하지 않을 때 요청이 무한 대기하지 않도록 함
+    # keepalives: 긴 배치 작업 중 유휴 연결이 중간 장비에 의해 끊기는 것 방지
+    conn = psycopg2.connect(
+        DATABASE_URL,
+        cursor_factory=RealDictCursor,
+        connect_timeout=10,
+        keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
+    )
     return conn
+
+
+def execute_batch_update(conn, sql: str, rows: list, template: str = None, page_size: int = 500):
+    """UPDATE ... FROM (VALUES %s) 형태의 다건 갱신을 소수의 왕복으로 처리.
+    원격 DB(Supabase)에서 행 단위 execute는 건당 수백 ms가 걸려 수천 건이면
+    CI 타임아웃(60분)을 넘기므로, 반드시 이 함수로 묶어서 보낸다."""
+    from psycopg2.extras import execute_values
+    if not rows:
+        return
+    with conn.cursor() as cur:
+        execute_values(cur, sql, rows, template=template, page_size=page_size)
+    conn.commit()
 
 
 def init_db():
     conn = get_db()
+    try:
+        _create_schema(conn)
+    finally:
+        conn.close()
+
+
+def _create_schema(conn):
     with conn.cursor() as cur:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS articles (
@@ -64,6 +90,7 @@ def init_db():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_source   ON articles(source)")
         # 저장 시 제목+소스 중복 방어 조회용
         cur.execute("CREATE INDEX IF NOT EXISTS idx_source_title ON articles(source, title)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_cluster_id ON articles(cluster_id)")
         # 기존 테이블에 컬럼 추가 (이미 존재하면 무시)
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS cluster_id TEXT")
         # 사용자 피드백: 0=없음, -1=사용자가 '관련 없음' 처리, 1=사용자가 복구
@@ -90,4 +117,3 @@ def init_db():
             )
         """)
     conn.commit()
-    conn.close()

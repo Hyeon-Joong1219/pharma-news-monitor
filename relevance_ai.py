@@ -25,7 +25,7 @@ import json
 import logging
 import time
 import yaml
-from db import get_db
+from db import get_db, execute_batch_update
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,8 @@ def _hard_exclude(article: dict) -> bool:
             if not rule["rescue"] or not any(kw.lower() in text for kw in rule["rescue"]):
                 return True
     return False
-BACKFILL_LIMIT        = 200  # 미분류(ai_classified=0) 기사 한 번에 재처리 최대 건수
+BACKFILL_LIMIT        = 200
+MAX_CONSECUTIVE_FAILS = 3    # 연속 API 실패 시 조기 중단 (Groq 장애·한도 초과 대비)  # 미분류(ai_classified=0) 기사 한 번에 재처리 최대 건수
 MODEL                 = "openai/gpt-oss-20b"
 
 
@@ -130,7 +131,8 @@ def _get_client():
             "  2. API Keys 메뉴에서 키 생성\n"
             "  3. .env 파일에 GROQ_API_KEY=gsk_... 추가"
         )
-    return Groq(api_key=api_key)
+    # timeout/max_retries 명시: 응답 지연 시 배치 하나가 수 분씩 멈추지 않도록 함
+    return Groq(api_key=api_key, timeout=45, max_retries=2)
 
 
 def _load_dedicated_sources() -> set:
@@ -270,19 +272,31 @@ def _apply_hard_exclude(conn, articles: list) -> list:
             pass_through.append(a)
 
     if blocked_ids:
+        # 사용자가 직접 복구한 기사(user_feedback≠0)는 재차 숨기지 않음
         with conn.cursor() as cur:
-            for aid in blocked_ids:
-                # 사용자가 직접 복구한 기사(user_feedback≠0)는 재차 숨기지 않음
-                cur.execute(
-                    "UPDATE articles SET "
-                    "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN 1 ELSE hidden END, "
-                    "ai_classified=1, relevance_score=0 WHERE id=%s",
-                    (aid,),
-                )
+            cur.execute(
+                "UPDATE articles SET "
+                "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN 1 ELSE hidden END, "
+                "ai_classified=1, relevance_score=0 WHERE id = ANY(%s)",
+                (blocked_ids,),
+            )
         conn.commit()
         logger.info(f"  [하드제외] {len(blocked_ids)}건 즉시 차단 (AI 생략)")
 
     return pass_through
+
+
+def _save_scores(conn, updates: list):
+    """(relevance_score, hidden, id) 목록을 한 번의 왕복으로 반영."""
+    execute_batch_update(
+        conn,
+        "UPDATE articles AS a SET relevance_score=v.rel, "
+        "hidden=CASE WHEN COALESCE(a.user_feedback,0)=0 THEN v.hidden ELSE a.hidden END, "
+        "ai_classified=1 "
+        "FROM (VALUES %s) AS v(rel, hidden, id) WHERE a.id = v.id",
+        updates,
+        template="(%s::real, %s::int, %s::int)",
+    )
 
 
 def _run_backfill(client, dedicated: set) -> int:
@@ -312,29 +326,30 @@ def _run_backfill(client, dedicated: set) -> int:
         hard_blocked = len(rows) - len(articles)
 
         hidden_cnt = hard_blocked
+        fails = 0
         for i in range(0, len(articles), BATCH_SIZE):
             batch  = articles[i: i + BATCH_SIZE]
             scores = _classify_batch(client, batch)
             if not scores:
                 logger.warning(f"[Backfill] 배치 {i//BATCH_SIZE+1} API 실패 — 건너뜀")
+                fails += 1
+                if fails >= MAX_CONSECUTIVE_FAILS:
+                    logger.error(f"[Backfill] API {fails}회 연속 실패 — 중단 (다음 실행에서 재시도)")
+                    break
                 time.sleep(2.0)
                 continue
-            with conn.cursor() as cur:
-                for a in batch:
-                    if a["id"] not in scores:
-                        continue
-                    score  = scores[a["id"]]
-                    thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
-                    hidden = 1 if score < thresh else 0
-                    if hidden:
-                        hidden_cnt += 1
-                    cur.execute(
-                        "UPDATE articles SET relevance_score=%s, "
-                        "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN %s ELSE hidden END, "
-                        "ai_classified=1 WHERE id=%s",
-                        (score * 10, hidden, a["id"]),
-                    )
-            conn.commit()
+            fails = 0
+            updates = []
+            for a in batch:
+                if a["id"] not in scores:
+                    continue
+                score  = scores[a["id"]]
+                thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
+                hidden = 1 if score < thresh else 0
+                if hidden:
+                    hidden_cnt += 1
+                updates.append((score * 10, hidden, a["id"]))
+            _save_scores(conn, updates)
             time.sleep(2.0)
 
         logger.info(f"[Backfill] 완료 — hidden: {hidden_cnt}건 / {len(rows)}건")
@@ -363,16 +378,18 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
     cond   = "" if force else "AND (ai_classified IS NULL OR ai_classified = 0)"
 
     conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT id, title, title_ko, summary, source, lang FROM articles "
-            f"WHERE fetched_at >= %s {cond} ORDER BY fetched_at DESC",
-            (cutoff,),
-        )
-        rows = cur.fetchall()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT id, title, title_ko, summary, source, lang FROM articles "
+                f"WHERE fetched_at >= %s {cond} ORDER BY fetched_at DESC",
+                (cutoff,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
 
     all_articles = [dict(r) for r in rows]
-    conn.close()
 
     if not all_articles:
         logger.info("AI 분류 대상 없음")
@@ -394,30 +411,31 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
         hidden_cnt += hard_blocked
 
         # 2단계: 나머지는 AI 분류
+        fails = 0
         for i in range(0, len(to_classify), BATCH_SIZE):
             batch  = to_classify[i: i + BATCH_SIZE]
             scores = _classify_batch(client, batch)
             batch_num = i // BATCH_SIZE + 1
             if not scores:
                 logger.warning(f"  배치 {batch_num} API 실패 — 미분류 유지 (나중에 백필)")
+                fails += 1
+                if fails >= MAX_CONSECUTIVE_FAILS:
+                    # Groq 장애/한도 초과 시 남은 배치를 계속 두드리며 CI 시간을 소진하지 않음
+                    raise RuntimeError(f"Groq API {fails}회 연속 실패 — AI 분류 중단")
                 time.sleep(2.0)
                 continue
-            with conn.cursor() as cur:
-                for a in batch:
-                    if a["id"] not in scores:
-                        continue
-                    score  = scores[a["id"]]
-                    thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
-                    hidden = 1 if score < thresh else 0
-                    if hidden:
-                        hidden_cnt += 1
-                    cur.execute(
-                        "UPDATE articles SET relevance_score=%s, "
-                        "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN %s ELSE hidden END, "
-                        "ai_classified=1 WHERE id=%s",
-                        (score * 10, hidden, a["id"]),
-                    )
-            conn.commit()
+            fails = 0
+            updates = []
+            for a in batch:
+                if a["id"] not in scores:
+                    continue
+                score  = scores[a["id"]]
+                thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
+                hidden = 1 if score < thresh else 0
+                if hidden:
+                    hidden_cnt += 1
+                updates.append((score * 10, hidden, a["id"]))
+            _save_scores(conn, updates)
             logger.info(f"  배치 {batch_num} 완료 ({len(batch)}건)")
             time.sleep(2.0)
     finally:

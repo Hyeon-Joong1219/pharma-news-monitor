@@ -89,6 +89,9 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
 
 /* ── 숨김 감사 모드 ── */
 .sort-btn.hidden-toggle.active { background:#7048c5; border-color:#7048c5; }
+.sys-banner { display:none; background:#fdecea; border-bottom:1px solid #f5c2bd; color:#8a1f11; font-size:.82rem; padding:10px 18px; }
+.sys-banner.warn { background:#fff6e0; border-color:#f3dca0; color:#7a5300; }
+.sys-banner.show { display:block; }
 .hidden-banner { background:#f3edfd; border:1px solid #d5c5f5; color:#5a35a8; font-size:.8rem; padding:8px 14px; border-radius:8px; margin-bottom:10px; }
 .rel-badge { font-size:.67rem; background:#ede5fc; color:#5a35a8; padding:1px 7px; border-radius:3px; font-weight:700; }
 .btn-feedback { font-size:.7rem; padding:3px 9px; border:1px solid #e0c0c0; border-radius:4px; background:#fdf5f5; color:#a84a4a; cursor:pointer; white-space:nowrap; flex-shrink:0; }
@@ -196,6 +199,7 @@ main { max-width:980px; margin:0 auto; padding:16px 16px 48px; }
   </div>
   <div class="health-panel" id="healthPanel"></div>
 </header>
+<div class="sys-banner" id="sysBanner" role="alert"></div>
 
 <!-- 국내/해외 탭 -->
 <div class="lang-tabs">
@@ -340,6 +344,44 @@ function setSort(sort, btn) {
   doSearch(1);
 }
 
+// ── 공통 API 호출 ────────────────────────────────
+// 서버가 오류를 JSON({error, code})으로 돌려주면 그 메시지를 그대로 예외로 던진다.
+// DB 연결 실패(503)는 상단 배너로 원인을 안내한다.
+async function api(url, opts) {
+  let r;
+  try {
+    r = await fetch(url, opts);
+  } catch {
+    throw new Error('서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.');
+  }
+  let data = null;
+  try { data = await r.json(); } catch {}
+  if (!r.ok) {
+    const msg = (data && data.error) || `요청 실패 (HTTP ${r.status})`;
+    if (data && data.code === 'db_unavailable') showSysBanner('🛑 ' + msg, 'error');
+    const err = new Error(msg); err.status = r.status; err.data = data;
+    throw err;
+  }
+  if (data === null) throw new Error('서버 응답을 해석할 수 없습니다.');
+  return data;
+}
+
+function showSysBanner(text, level) {
+  const b = document.getElementById('sysBanner');
+  b.textContent = text;
+  b.className = 'sys-banner show' + (level === 'warn' ? ' warn' : '');
+}
+
+async function checkHealth() {
+  try {
+    const h = await api('/api/health');
+    // 자동 수집이 12시간 넘게 멈추면 경고 (GitHub Actions 비활성화·타임아웃 조기 감지)
+    if (h.hours_since_last_fetch != null && h.hours_since_last_fetch > 12) {
+      showSysBanner(`⚠️ 마지막 기사 수집이 ${Math.round(h.hours_since_last_fetch)}시간 전입니다. 자동 수집(GitHub Actions)이 멈췄는지 확인해주세요.`, 'warn');
+    }
+  } catch {}
+}
+
 // ── 시장 브리프 ──────────────────────────────────
 let briefOpen = true;
 
@@ -353,7 +395,7 @@ async function loadBrief(refresh) {
   const params = new URLSearchParams({ lang: currentLang });
   if (refresh) params.set('refresh', '1');
   try {
-    const data = await (await fetch('/api/daily-brief?' + params)).json();
+    const data = await api('/api/daily-brief?' + params);
     document.getElementById('briefLoading').style.display = 'none';
     if (data.brief) {
       document.getElementById('briefText').textContent = data.brief;
@@ -395,7 +437,7 @@ async function triggerFetch() {
     // 완료될 때까지 폴링
     _fetchPollTimer = setInterval(async () => {
       try {
-        const s = await (await fetch('/api/fetch-status')).json();
+        const s = await api('/api/fetch-status');
         if (!s.running) {
           clearInterval(_fetchPollTimer);
           btn.disabled = false; btn.textContent = '🔄 새 기사 가져오기';
@@ -417,7 +459,7 @@ async function triggerFetch() {
 
 async function loadFetchStatus() {
   try {
-    const s = await (await fetch('/api/fetch-status')).json();
+    const s = await api('/api/fetch-status');
     const status = document.getElementById('fetchStatus');
     if (s.running) {
       status.textContent = '⏳ 수집 중…';
@@ -433,7 +475,7 @@ let _healthOpen = false;
 
 async function loadFeedHealth() {
   try {
-    const h = await (await fetch('/api/feed-health')).json();
+    const h = await api('/api/feed-health');
     const badge = document.getElementById('healthBadge');
     const panel = document.getElementById('healthPanel');
     const problems = (h.failing_count || 0) + (h.ai_error ? 1 : 0);
@@ -452,7 +494,7 @@ async function loadFeedHealth() {
     if (h.ai_error) {
       html += `<div class="health-item"><span class="h-name">🤖 AI 분류 실패</span><div class="h-err">${escapeH(h.ai_error)}</div><div class="h-meta">AI 승인 대기 기사는 키워드 필터로 임시 노출됩니다</div></div>`;
     }
-    if (h.failing.length) {
+    if ((h.failing || []).length) {
       html += h.failing.map(f => `
         <div class="health-item">
           <span class="h-name">${escapeH(f.source)}</span>
@@ -489,7 +531,8 @@ async function refreshSourceDropdown() {
   const cur = sel.value;
   try {
     const url = '/api/sources' + (currentLang ? '?lang=' + currentLang : '');
-    const sources = await (await fetch(url)).json();
+    const sources = await api(url);
+    if (!Array.isArray(sources)) return;
     sel.innerHTML = '<option value="">전체 매체</option>';
     sources.forEach(s => {
       const o = document.createElement('option');
@@ -503,11 +546,13 @@ async function refreshSourceDropdown() {
 // ── 탭 카운트 (단일 쿼리 엔드포인트) ─────────────────
 async function loadCounts(base) {
   try {
-    const c = await (await fetch('/api/counts?' + base)).json();
+    const c = await api('/api/counts?' + base);
     document.getElementById('cnt-all').textContent = (c.all ?? 0).toLocaleString();
     document.getElementById('cnt-ko').textContent  = (c.ko  ?? 0).toLocaleString();
     document.getElementById('cnt-en').textContent  = (c.en  ?? 0).toLocaleString();
-  } catch {}
+  } catch {
+    ['cnt-all', 'cnt-ko', 'cnt-en'].forEach(id => document.getElementById(id).textContent = '-');
+  }
 }
 
 // ── 숨김 감사 모드 ────────────────────────────────
@@ -530,12 +575,12 @@ function toggleWatchPanel() {
 async function loadWatchlist() {
   const box = document.getElementById('watchChips');
   try {
-    const rows = await (await fetch('/api/watchlist')).json();
+    const rows = await api('/api/watchlist');
     box.innerHTML = rows.length
       ? rows.map(r => `<span class="watch-chip">${esc(r.keyword)}<button onclick="delWatchKeyword(${r.id})" title="삭제">✕</button></span>`).join(' ')
       : '<span class="wp-empty">등록된 키워드가 없습니다. 회사명·기술(예: ADC, CDMO, 비만치료제)을 추가해 보세요.</span>';
-  } catch {
-    box.innerHTML = '<span class="wp-empty">불러오기 실패</span>';
+  } catch (e) {
+    box.innerHTML = `<span class="wp-empty">불러오기 실패: ${esc(e.message || '')}</span>`;
   }
 }
 
@@ -544,7 +589,7 @@ async function addWatchKeyword() {
   const kw = input.value.trim();
   if (!kw) return;
   try {
-    await fetch('/api/watchlist', {
+    await api('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keyword: kw }),
@@ -557,7 +602,7 @@ async function addWatchKeyword() {
 
 async function delWatchKeyword(id) {
   try {
-    await fetch(`/api/watchlist/${id}`, { method: 'DELETE' });
+    await api(`/api/watchlist/${id}`, { method: 'DELETE' });
     await loadWatchlist();
     doSearch(currentPage);
   } catch {}
@@ -647,14 +692,16 @@ async function doSearch(page) {
 
   showSpinner(true);
   try {
-    const [res] = await Promise.all([
-      fetch('/api/articles?' + params),
+    const [data] = await Promise.all([
+      api('/api/articles?' + params),
       loadCounts(params),
     ]);
-    renderArticles(await res.json());
-  } catch {
+    renderArticles(data);
+  } catch (e) {
+    document.getElementById('resultInfo').innerHTML = '';
+    document.getElementById('pagination').innerHTML = '';
     document.getElementById('articleList').innerHTML =
-      '<div class="empty-state"><div class="icon">⚠️</div><p>데이터를 불러오지 못했습니다.</p></div>';
+      `<div class="empty-state"><div class="icon">⚠️</div><p>데이터를 불러오지 못했습니다.<br><small>${esc(e.message || '')}</small></p></div>`;
   }
   showSpinner(false);
 }
@@ -777,7 +824,7 @@ async function translateCard(id) {
   if (!btn) return;
   btn.disabled = true; btn.textContent = '번역 중…';
   try {
-    const d = await (await fetch(`/api/translate/${id}`, { method: 'POST' })).json();
+    const d = await api(`/api/translate/${id}`, { method: 'POST' });
     if (d.title_ko) {
       const titleEl = document.getElementById(`title-${id}`);
       if (titleEl) {
@@ -802,7 +849,7 @@ async function aiSummary(id) {
   btn.disabled = true; btn.textContent = '요약 생성 중…';
   box.style.display = 'none';
   try {
-    const d = await (await fetch(`/api/ai-summary/${id}`, { method: 'POST' })).json();
+    const d = await api(`/api/ai-summary/${id}`, { method: 'POST' });
     if (d.summary_ko) {
       const text = d.summary_ko.replace(/^【AI】/, '');
       box.innerHTML = `<div class="ai-summary-box"><div class="ai-summary-label">🤖 AI 한국어 요약 ${d.cached ? '(캐시)' : ''}</div>${esc(text)}</div>`;
@@ -910,7 +957,7 @@ async function toggleCluster(articleId, clusterId) {
     panel.style.display = 'block';
     panel.innerHTML = '<div class="cluster-panel-title">불러오는 중…</div>';
     try {
-      const articles = await (await fetch(`/api/cluster/${encodeURIComponent(clusterId)}`)).json();
+      const articles = await api(`/api/cluster/${encodeURIComponent(clusterId)}`);
       if (!articles.length) {
         panel.innerHTML = '';
         panel.style.display = 'none';
@@ -946,6 +993,7 @@ doSearch(1);
 loadBrief(false);
 loadFetchStatus();
 loadFeedHealth();
+checkHealth();
 </script>
 </body>
 </html>

@@ -9,6 +9,10 @@ concurrency:
   group: pharma-db-write    # fetch.yml과 동일한 그룹 → 동시 실행 방지
   cancel-in-progress: false  # 실행 중인 fetch가 끝난 후 cleanup 실행
 
+permissions:
+  contents: read
+  actions: write     # 아래 keepalive 단계에서 워크플로 재활성화에 필요
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
@@ -28,13 +32,29 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Re-score all recent articles
+        timeout-minutes: 15
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python scoring.py 30
 
       - name: Re-classify relevance (force, 7 days)
+        timeout-minutes: 35
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python relevance_ai.py 7 --force
+
+      # GitHub은 저장소에 60일간 커밋이 없으면 예약(schedule) 워크플로를 자동
+      # 비활성화한다(disabled_inactivity). 2026-09 실제로 이 때문에 수집이 멈추고
+      # Supabase 무료 DB까지 7일 무활동으로 일시중지돼 사이트 전체가 다운됐음.
+      # 매 실행마다 두 워크플로를 API로 재활성화해 비활성화 타이머를 초기화한다.
+      - name: Keep scheduled workflows alive
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in fetch.yml cleanup.yml; do
+            gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/enable" || true
+          done

@@ -9,7 +9,7 @@ import re
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from db import get_db
+from db import get_db, execute_batch_update
 from kwmatch import contains_keyword, weighted_score
 
 logger = logging.getLogger(__name__)
@@ -132,9 +132,16 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
     # 기사별 메타 준비
     meta = {}
     for a in articles:
-        try:
-            t = datetime.fromisoformat(a["fetched_at"])
-        except Exception:
+        # psycopg2는 TIMESTAMP를 이미 datetime으로 반환한다. 과거 여기서
+        # fromisoformat(datetime)이 항상 TypeError → utcnow()로 대체되어
+        # 48시간 클러스터 시간창이 사실상 적용되지 않던 버그가 있었음
+        t = a.get("fetched_at")
+        if isinstance(t, str):
+            try:
+                t = datetime.fromisoformat(t)
+            except ValueError:
+                t = None
+        if not isinstance(t, datetime):
             t = datetime.utcnow()
         # 영문 + 한국어 번역 제목 모두 활용 (영문 임계값은 4자 고정)
         words = significant_words(a.get("title") or "", min_len_ko)
@@ -233,12 +240,16 @@ def run_scoring(days: int = 30):
     conn = get_db()
     cutoff = datetime.utcnow() - timedelta(days=days)
 
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, title, title_ko, summary, source, fetched_at, published_dt, ai_classified, user_feedback FROM articles WHERE fetched_at >= %s",
-            (cutoff,),
-        )
-        articles = [dict(r) for r in cur.fetchall()]
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, title, title_ko, summary, source, fetched_at, published_dt, ai_classified, user_feedback FROM articles WHERE fetched_at >= %s",
+                (cutoff,),
+            )
+            articles = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        conn.close()
+        raise
 
     if not articles:
         conn.close()
@@ -300,34 +311,31 @@ def run_scoring(days: int = 30):
                     hidden_cnt += 1
                 updates_full.append((final, source_count, str(root), rel, hidden, a["id"]))
 
-    # ID 순 정렬 후 50개씩 커밋 (데드락 방지 + Supabase 타임아웃 방지)
-    BATCH = 50
+    # ID 순 정렬(데드락 방지) 후 500건씩 한 번의 왕복으로 갱신.
+    # (과거 행 단위 UPDATE는 원격 DB에서 수천 건에 40분 이상 걸려
+    #  GitHub Actions 60분 타임아웃으로 수집 작업이 계속 취소되는 원인이었음)
+    try:
+        updates_score_only.sort(key=lambda x: x[-1])
+        execute_batch_update(
+            conn,
+            "UPDATE articles AS a SET score=v.score, source_count=v.sc, cluster_id=v.cid "
+            "FROM (VALUES %s) AS v(score, sc, cid, id) WHERE a.id = v.id",
+            updates_score_only,
+            template="(%s::real, %s::int, %s::text, %s::int)",
+        )
 
-    updates_score_only.sort(key=lambda x: x[-1])
-    for i in range(0, len(updates_score_only), BATCH):
-        batch = updates_score_only[i: i + BATCH]
-        with conn.cursor() as cur:
-            for row in batch:
-                cur.execute(
-                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s WHERE id=%s",
-                    row,
-                )
-        conn.commit()
-
-    updates_full.sort(key=lambda x: x[-1])
-    for i in range(0, len(updates_full), BATCH):
-        batch = updates_full[i: i + BATCH]
-        with conn.cursor() as cur:
-            for row in batch:
-                cur.execute(
-                    "UPDATE articles SET score=%s, source_count=%s, cluster_id=%s, relevance_score=%s, "
-                    "hidden=CASE WHEN COALESCE(user_feedback,0)=0 THEN %s ELSE hidden END WHERE id=%s",
-                    row,
-                )
-        conn.commit()
-        logger.info(f"  스코어링 배치 {i//BATCH + 1} 커밋 ({len(batch)}건)")
-
-    conn.close()
+        updates_full.sort(key=lambda x: x[-1])
+        execute_batch_update(
+            conn,
+            "UPDATE articles AS a SET score=v.score, source_count=v.sc, cluster_id=v.cid, "
+            "relevance_score=v.rel, "
+            "hidden=CASE WHEN COALESCE(a.user_feedback,0)=0 THEN v.hidden ELSE a.hidden END "
+            "FROM (VALUES %s) AS v(score, sc, cid, rel, hidden, id) WHERE a.id = v.id",
+            updates_full,
+            template="(%s::real, %s::int, %s::text, %s::real, %s::int, %s::int)",
+        )
+    finally:
+        conn.close()
     total_scored = len(updates_score_only) + len(updates_full)
     logger.info(
         f"스코어링 완료 - 전체 {total_scored}건 "

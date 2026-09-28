@@ -12,6 +12,7 @@ import requests
 import urllib3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
+from psycopg2.extras import execute_values
 from db import get_db, init_db
 from kwmatch import match_keywords, weighted_score
 
@@ -52,7 +53,7 @@ def _translate_groq(text: str) -> str:
         key = _load_api_key()
         if not key:
             return ""
-        resp = Groq(api_key=key).chat.completions.create(
+        resp = Groq(api_key=key, timeout=20, max_retries=1).chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[{
                 "role": "user",
@@ -209,7 +210,9 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
 
         skipped_short  = 0
         skipped_filter = 0
-        rows_to_insert = []
+        candidates     = []
+        seen_hashes: set = set()
+        seen_titles: set = set()
 
         for entry in parsed.entries:
             title     = strip_html((entry.get("title") or "").strip())
@@ -259,12 +262,6 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
                 except Exception:
                     pass
 
-            # ── 영문 기사 번역 ─────────────────────────────────────
-            title_ko = summary_ko = ""
-            if lang == "en":
-                title_ko   = translate_to_ko(title)
-                summary_ko = translate_to_ko(summary[:800]) if summary else ""
-
             pub_dt_obj = None
             if published_dt:
                 try:
@@ -274,42 +271,70 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
 
             # non-dedicated 기사는 AI 승인 전까지 숨김 (hidden=1)
             initial_hidden = 0 if dedicated else 1
-            rows_to_insert.append((
-                title, link, name, published, pub_dt_obj,
-                summary[:2000],
-                ", ".join(matched) if matched else "",
-                compute_hash(title, link),
-                datetime.datetime.utcnow(),
-                lang, title_ko, summary_ko,
-                initial_hidden,
-            ))
+            h = compute_hash(title, link)
+            if h in seen_hashes or title in seen_titles:
+                continue
+            seen_hashes.add(h)
+            seen_titles.add(title)
+            candidates.append({
+                "title": title, "link": link, "published": published,
+                "pub_dt": pub_dt_obj, "summary": summary[:2000],
+                "keywords": ", ".join(matched) if matched else "",
+                "hash": h, "hidden": initial_hidden,
+            })
 
         # ── DB 저장 (스레드별 독립 연결) ──────────────────────────
+        # 이미 저장된 기사를 먼저 한 번에 걸러낸 뒤 새 기사만 번역·저장한다.
+        # (과거에는 매 실행마다 피드의 모든 영문 기사를 번역하고 건별로
+        #  SELECT/INSERT 해서 수집 작업이 CI 타임아웃을 넘기는 원인이 됐음)
         saved = 0
-        if rows_to_insert:
+        if candidates:
             conn = get_db()
             try:
-                for row in rows_to_insert:
+                with conn.cursor() as cur:
+                    # hash는 title|link 기반이라 링크 형식이 바뀌면(예: Google News
+                    # 디코딩 도입) 같은 기사가 재저장될 수 있음 → 제목+소스로 2차 방어
+                    cur.execute(
+                        "SELECT hash, title FROM articles "
+                        "WHERE hash = ANY(%s) OR (source = %s AND title = ANY(%s))",
+                        ([c["hash"] for c in candidates], name,
+                         [c["title"] for c in candidates]),
+                    )
+                    existing = cur.fetchall()
+                known_hashes = {r["hash"] for r in existing}
+                known_titles = {r["title"] for r in existing}
+                new_items = [c for c in candidates
+                             if c["hash"] not in known_hashes and c["title"] not in known_titles]
+
+                now = datetime.datetime.utcnow()
+                rows_to_insert = []
+                for c in new_items:
+                    # ── 영문 기사 번역 (신규 기사만) ──────────────────
+                    title_ko = summary_ko = ""
+                    if lang == "en":
+                        title_ko   = translate_to_ko(c["title"])
+                        summary_ko = translate_to_ko(c["summary"][:800]) if c["summary"] else ""
+                    rows_to_insert.append((
+                        c["title"], c["link"], name, c["published"], c["pub_dt"],
+                        c["summary"], c["keywords"], c["hash"], now,
+                        lang, title_ko, summary_ko, c["hidden"],
+                    ))
+
+                if rows_to_insert:
                     with conn.cursor() as cur:
-                        # hash는 title|link 기반이라 링크 형식이 바뀌면(예: Google News
-                        # 디코딩 도입) 같은 기사가 재저장될 수 있음 → 제목+소스로 2차 방어
-                        cur.execute(
-                            "SELECT 1 FROM articles WHERE source=%s AND title=%s LIMIT 1",
-                            (row[2], row[0]),
-                        )
-                        if cur.fetchone():
-                            continue
-                        cur.execute(
+                        inserted = execute_values(
+                            cur,
                             """INSERT INTO articles
                                (title, link, source, published, published_dt, summary, keywords,
                                 hash, fetched_at, lang, title_ko, summary_ko, hidden)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                               ON CONFLICT (hash) DO NOTHING""",
-                            row,
+                               VALUES %s
+                               ON CONFLICT (hash) DO NOTHING
+                               RETURNING id""",
+                            rows_to_insert,
+                            fetch=True,
                         )
-                        if cur.rowcount:
-                            saved += 1
-                conn.commit()
+                        saved = len(inserted)
+                    conn.commit()
             finally:
                 conn.close()
 

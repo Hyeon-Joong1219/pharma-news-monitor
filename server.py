@@ -8,7 +8,9 @@ import logging as _logging
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+import psycopg2
 from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 from db import get_db, init_db
 from kwmatch import contains_keyword
 
@@ -58,7 +60,7 @@ def _generate_brief(articles: list, lang: str) -> str:
     api_key = _load_groq_key()
     if not api_key:
         return "GROQ_API_KEY가 설정되지 않았습니다."
-    client = Groq(api_key=api_key)
+    client = Groq(api_key=api_key, timeout=45, max_retries=1)
     lines = []
     for i, a in enumerate(articles[:20]):
         title   = (a.get("title_ko") or a.get("title") or "")[:100]
@@ -102,6 +104,106 @@ def _generate_brief(articles: list, lang: str) -> str:
 from fetch import translate_to_ko as _translate
 
 app = Flask(__name__)
+_log = _logging.getLogger("server")
+
+
+# ── 전역 에러 처리 ─────────────────────────────────────────────────
+# API가 HTML 500 페이지 대신 항상 JSON을 돌려주도록 해서 프론트엔드가
+# 원인을 사용자에게 표시할 수 있게 한다.
+
+_DB_DOWN_MSG = ("데이터베이스에 연결할 수 없습니다. Supabase 프로젝트가 일시중지(pause)"
+                "되었거나 DATABASE_URL이 올바르지 않을 수 있습니다.")
+
+
+@app.errorhandler(psycopg2.OperationalError)
+def _handle_db_down(e):
+    _log.error(f"DB 연결 실패: {e}")
+    return jsonify({"error": _DB_DOWN_MSG, "code": "db_unavailable"}), 503
+
+
+@app.errorhandler(psycopg2.DataError)
+def _handle_bad_input(e):
+    return jsonify({"error": "잘못된 요청 값입니다.", "code": "bad_request"}), 400
+
+
+@app.errorhandler(Exception)
+def _handle_unexpected(e):
+    if isinstance(e, HTTPException):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": e.description, "code": e.name}), e.code
+        return e
+    _log.exception(f"처리되지 않은 오류: {request.path}")
+    return jsonify({"error": f"서버 오류: {type(e).__name__}", "code": "internal"}), 500
+
+
+# 스키마 보장 — gunicorn 배포에서는 __main__ 블록이 실행되지 않아 init_db가
+# 호출되지 않으므로, 첫 API 요청 시 한 번 실행한다(실패 시 다음 요청에서 재시도).
+_schema_ready    = False
+_schema_tried_at = 0.0
+_schema_lock     = threading.Lock()
+
+
+@app.before_request
+def _ensure_schema():
+    global _schema_ready, _schema_tried_at
+    if _schema_ready or not request.path.startswith("/api/"):
+        return
+    # DB 장애 중에는 매 요청마다 재시도하지 않도록 60초 간격으로만 시도.
+    # 실패해도 요청은 그대로 진행 — DB가 필요한 엔드포인트만 503을 반환한다.
+    if time.time() - _schema_tried_at < 60:
+        return
+    with _schema_lock:
+        if _schema_ready or time.time() - _schema_tried_at < 60:
+            return
+        _schema_tried_at = time.time()
+        try:
+            init_db()
+            _schema_ready = True
+        except psycopg2.OperationalError as e:
+            _log.warning(f"init_db: DB 연결 실패 — 60초 후 재시도: {e}")
+        except Exception as e:
+            # 권한 문제 등으로 DDL이 실패해도 조회 기능은 계속 동작하도록 함
+            _log.warning(f"init_db 실패 (무시): {e}")
+            _schema_ready = True
+
+
+def _int_arg(name: str, default: int, lo: int = 1, hi: int = 10_000) -> int:
+    try:
+        return min(hi, max(lo, int(request.args.get(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _date_arg(value: str) -> str:
+    """YYYY-MM-DD 형식만 허용 (잘못된 값은 무시)."""
+    try:
+        return datetime.date.fromisoformat(value).isoformat()
+    except (TypeError, ValueError):
+        return ""
+
+
+@app.route("/api/health")
+def api_health():
+    """DB 연결 상태 확인용 (모니터링/대시보드 배너)."""
+    try:
+        conn = get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(fetched_at) AS last FROM articles")
+                last = cur.fetchone()["last"]
+        finally:
+            conn.close()
+    except psycopg2.Error as e:
+        _log.error(f"health check 실패: {e}")
+        return jsonify({"ok": False, "db": False, "error": _DB_DOWN_MSG}), 503
+    stale_hours = None
+    if isinstance(last, datetime.datetime):
+        stale_hours = round((datetime.datetime.utcnow() - last).total_seconds() / 3600, 1)
+    return jsonify({
+        "ok": True, "db": True,
+        "last_fetched_at": last.isoformat() if isinstance(last, datetime.datetime) else None,
+        "hours_since_last_fetch": stale_hours,
+    })
 
 
 @app.route("/")
@@ -112,7 +214,8 @@ def index():
             cur.execute("SELECT DISTINCT source FROM articles ORDER BY source")
             sources = [r["source"] for r in cur.fetchall()]
         conn.close()
-    except Exception:
+    except Exception as e:
+        _log.warning(f"index: 매체 목록 조회 실패: {e}")
         sources = []
     return render_template("index.html", sources=sources)
 
@@ -163,8 +266,8 @@ def _build_article_filters(args, include_lang=True):
         where_parts.append("lang = %s")
         params.append(lang)
 
-    date_from = args.get("date_from", "").strip()
-    date_to   = args.get("date_to",   "").strip()
+    date_from = _date_arg(args.get("date_from", "").strip())
+    date_to   = _date_arg(args.get("date_to",   "").strip())
 
     # published_dt 없으면 fetched_at으로 대체
     DATE_FILTER = "COALESCE(published_dt, fetched_at)"
@@ -203,7 +306,7 @@ def _build_article_filters(args, include_lang=True):
 @app.route("/api/articles")
 def api_articles():
     sort     = request.args.get("sort", "date")
-    page     = max(1, int(request.args.get("page", 1)))
+    page     = _int_arg("page", 1)
     per_page = 50
 
     where_parts, params = _build_article_filters(request.args)
@@ -386,7 +489,7 @@ def api_feed_health():
                 "SELECT * FROM feed_health ORDER BY consecutive_failures DESC, source"
             )
             rows = [dict(r) for r in cur.fetchall()]
-    except Exception:
+    except psycopg2.errors.UndefinedTable:
         rows = []
     finally:
         conn.close()
@@ -418,7 +521,7 @@ def translate_article(article_id):
             if row["title_ko"]:
                 return jsonify({"title_ko": row["title_ko"]})
 
-            title_ko   = _translate(row["title"])
+            title_ko   = _translate(row["title"] or "")
             summary_ko = _translate((row["summary"] or "")[:500])
             cur.execute(
                 "UPDATE articles SET title_ko = %s, summary_ko = %s WHERE id = %s",
@@ -474,7 +577,7 @@ def ai_summary(article_id):
             "Korean summary (2-3 sentences only):"
         )
         try:
-            client  = Groq(api_key=api_key)
+            client  = Groq(api_key=api_key, timeout=45, max_retries=1)
             resp    = client.chat.completions.create(
                 model="openai/gpt-oss-20b",
                 messages=[{"role": "user", "content": prompt}],
