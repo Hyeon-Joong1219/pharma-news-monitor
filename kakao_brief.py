@@ -82,6 +82,41 @@ def load_articles(conn) -> tuple:
     return watch[:15], general[:10], keywords
 
 
+MET_MAX_ITEMS = 6   # 미팅 고객사 소식 최대 항목 (리스트 2통)
+
+
+def load_met_account_news(conn) -> list:
+    """내가 미팅한 고객사(met_accounts, scripts/sync_met_accounts.py가 Obsidian에서 동기화)
+    관련 최근 24시간 기사 → [(제목, 설명, 기사), ...]. 최근 미팅 순으로 정렬."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('met_accounts') AS t")
+        if not cur.fetchone()["t"]:
+            return []
+        cur.execute("SELECT account, aliases, last_meeting, meeting_count FROM met_accounts "
+                    "ORDER BY last_meeting DESC")
+        accounts = [dict(r) for r in cur.fetchall()]
+        cur.execute(
+            "SELECT id, title, title_ko FROM articles "
+            "WHERE (hidden IS NULL OR hidden = 0) AND fetched_at >= NOW() - INTERVAL '24 hours' "
+            "ORDER BY score DESC NULLS LAST"
+        )
+        articles = [dict(r) for r in cur.fetchall()]
+
+    # 제목에 회사명이 있는 기사만 — 본문까지 보면 '[주가] 70곳 변동' 같은 나열 기사가 섞임.
+    # 같은 행사를 여러 매체가 써서 cluster로도 안 묶이는 경우가 많아 회사당 1건(점수 최상위)만.
+    items = []
+    for acc in accounts:
+        aliases = [a.lower() for a in acc["aliases"].split("|") if a]
+        for a in articles:
+            title_text = " ".join(filter(None, [a["title"], a["title_ko"]])).lower()
+            if any(contains_keyword(title_text, al) for al in aliases):
+                last  = acc["last_meeting"].strftime("%m/%d")
+                title = f"🤝 {acc['account']} · 미팅 {last} ({acc['meeting_count']}회)"
+                items.append((_clip(title, TITLE_LIMIT), _clip(a["title_ko"] or a["title"] or "", DESC_LIMIT), a))
+                break
+    return items[:MET_MAX_ITEMS]
+
+
 # ── 2. 영업 관점 요약 ───────────────────────────────────────────────
 
 def _fmt(ref: str, a: dict) -> str:
@@ -172,6 +207,15 @@ def build_messages(header: str, items: list, base_url: str) -> list:
             "buttons": [{"title": "대시보드 전체 보기", "link": _link(base_url)}] if base_url else [],
         })
     return templates
+
+
+def to_templates(header: str, items: list, base_url: str) -> list:
+    """리스트 템플릿은 링크 필수·항목 2개 이상 → 조건이 안 되면 텍스트 1통으로 대체."""
+    if base_url and len(items) >= 2:
+        return build_messages(header, items, base_url)
+    link = f"{base_url}/go/{items[0][2]['id']}" if (base_url and items[0][2]) else base_url
+    lines = [f"{t}\n{d}" if d else t for t, d, _ in items[:3]]
+    return [text_template(f"{header}\n\n" + "\n\n".join(lines), link)]
 
 
 def text_template(text: str, url: str) -> dict:
@@ -270,14 +314,16 @@ def main():
         print(f"관심 기업 매칭 {len(watch)}건 / 기타 {len(general)}건 (워치리스트 {len(keywords)}개)")
 
         items = generate_brief(watch, general) if (watch or general) else []
-        if not items:
-            messages = [text_template(f"📰 {today} 영업 브리핑\n\n최근 24시간 동안 영업 관련 주요 기사가 없습니다.", url)]
-        elif not url or len(items) == 1:
-            # 리스트 템플릿은 링크 필수·항목 2개 이상 → 조건이 안 되면 텍스트로 대체
-            link = f"{url}/go/{items[0][2]['id']}" if (url and items[0][2]) else url
-            messages = [text_template(f"📰 {today} 영업 브리핑\n\n" + "\n".join(t for t, _, _ in items[:4]), link)]
+        if items:
+            messages = to_templates(f"📰 {today} 영업 브리핑", items, url)
         else:
-            messages = build_messages(f"📰 {today} 영업 브리핑", items, url)
+            messages = [text_template(f"📰 {today} 영업 브리핑\n\n최근 24시간 동안 영업 관련 주요 기사가 없습니다.", url)]
+
+        # 내가 미팅한 고객사 소식은 별도 메시지로 (기사가 있는 날만)
+        met_items = load_met_account_news(conn)
+        print(f"미팅 고객사 관련 기사 {len(met_items)}건")
+        if met_items:
+            messages += to_templates(f"🤝 {today} 내 미팅 고객사 소식", met_items, url)
 
         for m in messages:
             print("-" * 40 + "\n" + _describe(m))
