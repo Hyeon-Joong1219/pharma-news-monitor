@@ -48,6 +48,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for wf in fetch.yml cleanup.yml; do
+          for wf in fetch.yml cleanup.yml kakao-brief.yml; do
             gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/enable" || true
           done

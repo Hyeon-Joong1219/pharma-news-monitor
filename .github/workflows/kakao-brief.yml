@@ -1,0 +1,37 @@
+name: Kakao Morning Brief
+
+on:
+  schedule:
+    - cron: '30 22 * * 0-4'   # 평일 KST 07:30 (UTC 일~목 22:30). GitHub 대기열로 수~수십 분 지연될 수 있음
+  workflow_dispatch:           # 수동 실행 버튼
+
+permissions:
+  contents: read
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Send Kakao brief
+        env:
+          DATABASE_URL:        ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY:        ${{ secrets.GROQ_API_KEY }}
+          KAKAO_REST_API_KEY:  ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          DASHBOARD_URL:       ${{ vars.DASHBOARD_URL }}
+        run: python kakao_brief.py
