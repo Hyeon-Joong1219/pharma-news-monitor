@@ -1,8 +1,8 @@
 """평일 아침 영업 브리핑을 카카오톡 '나에게 보내기'로 발송.
 
 흐름: 최근 24시간 기사 조회 → 워치리스트 매칭 기사 우선 선별 →
-      Groq로 영업 관점 요약 → 카카오 토큰 갱신 → 항목별로 1통씩 발송
-      (각 메시지의 '기사 보기' 버튼 → 대시보드 /go/<id> → 원문 기사)
+      Groq로 영업 관점 요약 → 카카오 토큰 갱신 → 리스트 메시지(3항목씩, 최대 3통) 발송
+      (각 항목 클릭 → 대시보드 /go/<id> → 원문 기사)
 
 필요 환경변수
   DATABASE_URL, GROQ_API_KEY
@@ -27,8 +27,11 @@ from kwmatch import contains_keyword
 
 KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
 KAKAO_MEMO_URL  = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
-TEXT_LIMIT      = 200   # 카카오 기본 텍스트 템플릿 최대 글자 수
-MAX_MESSAGES    = 6     # 하루 발송 메시지 수 상한 (알림 폭탄 방지)
+TEXT_LIMIT      = 200   # 카카오 텍스트 템플릿 최대 글자 수 (기사 없음 안내용)
+PER_MESSAGE     = 3     # 카카오 리스트 템플릿 항목 상한
+MAX_ITEMS       = 9     # 하루 최대 항목 수 → 리스트 메시지 3통
+TITLE_LIMIT     = 45    # 리스트 항목 제목/설명은 카톡에서 2줄까지만 보임
+DESC_LIMIT      = 60
 MODEL           = "openai/gpt-oss-120b"
 
 # AI 분류 완료 기사는 관련성×키워드점수, 미분류는 키워드점수 (server.py와 동일 지표)
@@ -76,7 +79,7 @@ def load_articles(conn) -> tuple:
             watch.append(r)
         else:
             general.append(r)
-    return watch[:12], general[:8], keywords
+    return watch[:15], general[:10], keywords
 
 
 # ── 2. 영업 관점 요약 ───────────────────────────────────────────────
@@ -100,9 +103,11 @@ def generate_brief(watch: list, general: list) -> list:
         "영업 담당자를 돕는 애널리스트입니다. 담당 고객은 국내 Emerging Biotech와 CDMO입니다.\n"
         "아래 기사로 오늘 아침 영업 브리핑을 한국어로 작성하세요.\n\n"
         "형식 규칙:\n"
-        f"- 항목 3~{MAX_MESSAGES}개, 한 줄에 한 항목, 항목 사이 빈 줄 없음\n"
-        "- 각 줄은 반드시 근거 기사 번호로 시작: '[W3] 🔴 회사명: 무슨 일 → 머크 영업 기회/시사점'\n"
-        "- 번호 뒤 본문은 150자 이내 (카카오톡 메시지 제한)\n"
+        f"- 항목 {MAX_ITEMS - 3}~{MAX_ITEMS}개 (기사가 부족하면 그보다 적게), 한 줄에 한 항목, 항목 사이 빈 줄 없음\n"
+        "- 각 줄 형식: '[W3] 🔴 회사명: 핵심 사건 || 머크 영업 기회/시사점'\n"
+        "  · 반드시 근거 기사 번호로 시작하고, 사건과 시사점은 '||'로 구분\n"
+        f"  · '||' 앞(이모지·회사명·사건)은 {TITLE_LIMIT - 5}자 이내, 뒤(시사점)는 {DESC_LIMIT - 10}자 이내로 짧게\n"
+        "  · 같은 사건은 한 번만, 중요한 순서대로 정렬\n"
         "- 🔴=즉시 영업 액션 필요(투자유치, 임상 진입, 공장 증설, CDMO 계약), "
         "🟡=모니터링, ⚪=업계 동향\n"
         "- 관심 기업(W) 기사를 우선 배치하고, 영업과 무관한 기사는 생략\n"
@@ -122,31 +127,67 @@ def generate_brief(watch: list, general: list) -> list:
             continue
         items = []
         for line in content.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            m = re.match(r"^\[?([WG]\d+)\]?[.:)]?\s*(.+)$", line)
-            if m:
-                items.append((m.group(2).strip(), refs.get(m.group(1))))
-            else:
-                items.append((line, None))
-        return items[:MAX_MESSAGES]
+            m = re.match(r"^\[?([WG]\d+)\]?[.:)]?\s*(.+)$", line.strip())
+            if not m:
+                continue   # 근거 기사 없는 줄(머리말 등)은 링크를 걸 수 없으므로 제외
+            title, _, desc = m.group(2).partition("||")
+            items.append((_clip(title, TITLE_LIMIT), _clip(desc, DESC_LIMIT), refs.get(m.group(1))))
+        return items[:MAX_ITEMS]
     raise RuntimeError("Groq가 빈 응답을 반환했습니다.")
 
 
+def _clip(s: str, n: int) -> str:
+    s = s.strip()
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def _link(url: str) -> dict:
+    return {"web_url": url, "mobile_web_url": url}
+
+
 def build_messages(header: str, items: list, base_url: str) -> list:
-    """항목 1개 = 메시지 1통 (각자 원문 기사 링크 버튼). 첫 통에만 헤더 포함.
-    원문 URL은 200~400자라 텍스트에 직접 넣을 수 없어 대시보드 /go/<id>를 거친다."""
-    msgs = []
-    for i, (text, article) in enumerate(items):
-        body = f"{header}\n\n{text}" if i == 0 else text
-        if len(body) > TEXT_LIMIT:
-            body = body[:TEXT_LIMIT - 1] + "…"
-        if base_url and article:
-            msgs.append((body, f"{base_url}/go/{article['id']}", "기사 보기"))
-        else:
-            msgs.append((body, base_url, "대시보드 열기"))
-    return msgs
+    """3개씩 묶어 카카오 리스트 템플릿 목록으로 변환. 항목을 누르면 원문 기사로 이동.
+    원문 URL은 200~400자로 길고 도메인도 제각각이라(카카오는 등록 도메인만 링크 허용)
+    대시보드 /go/<id>를 거쳐 리다이렉트한다."""
+    # 리스트 템플릿은 항목이 2~3개여야 함 → 마지막 통에 1개만 남지 않도록 고르게 분배
+    # (예: 7개 → 3·2·2). 1개뿐이면 호출부에서 텍스트 템플릿으로 보낸다.
+    n_chunks = -(-len(items) // PER_MESSAGE)
+    sizes    = [len(items) // n_chunks + (1 if i < len(items) % n_chunks else 0) for i in range(n_chunks)]
+    chunks, pos = [], 0
+    for size in sizes:
+        chunks.append(items[pos:pos + size])
+        pos += size
+    templates = []
+    for n, chunk in enumerate(chunks, 1):
+        page = f" ({n}/{len(chunks)})" if len(chunks) > 1 else ""
+        templates.append({
+            "object_type":  "list",
+            "header_title": f"{header}{page}",
+            "header_link":  _link(base_url),
+            "contents": [
+                {"title": title, "description": desc,
+                 "link": _link(f"{base_url}/go/{a['id']}" if (base_url and a) else base_url)}
+                for title, desc, a in chunk
+            ],
+            "buttons": [{"title": "대시보드 전체 보기", "link": _link(base_url)}] if base_url else [],
+        })
+    return templates
+
+
+def text_template(text: str, url: str) -> dict:
+    t = {"object_type": "text", "text": _clip(text, TEXT_LIMIT), "link": _link(url)}
+    if url:
+        t["button_title"] = "대시보드 열기"
+    return t
+
+
+def _describe(t: dict) -> str:
+    if t["object_type"] == "text":
+        return t["text"]
+    rows = [f"■ {t['header_title']}"]
+    for c in t["contents"]:
+        rows.append(f"  {c['title']}\n     {c['description']}\n     → {c['link']['web_url'] or '(링크 없음)'}")
+    return "\n".join(rows)
 
 
 # ── 3. 카카오 발송 ──────────────────────────────────────────────────
@@ -205,11 +246,7 @@ def save_refresh_token(conn, refresh: str):
     conn.commit()
 
 
-def send_kakao(access_token: str, text: str, url: str, button: str = "대시보드 열기"):
-    template = {"object_type": "text", "text": text,
-                "link": {"web_url": url, "mobile_web_url": url}}
-    if url:
-        template["button_title"] = button
+def send_kakao(access_token: str, template: dict):
     resp = requests.post(
         KAKAO_MEMO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
@@ -232,23 +269,25 @@ def main():
         watch, general, keywords = load_articles(conn)
         print(f"관심 기업 매칭 {len(watch)}건 / 기타 {len(general)}건 (워치리스트 {len(keywords)}개)")
 
-        if not watch and not general:
-            messages = [(f"📰 [{today} 영업 브리핑]\n\n최근 24시간 동안 수집된 주요 기사가 없습니다.",
-                         url, "대시보드 열기")]
+        items = generate_brief(watch, general) if (watch or general) else []
+        if not items:
+            messages = [text_template(f"📰 {today} 영업 브리핑\n\n최근 24시간 동안 영업 관련 주요 기사가 없습니다.", url)]
+        elif not url or len(items) == 1:
+            # 리스트 템플릿은 링크 필수·항목 2개 이상 → 조건이 안 되면 텍스트로 대체
+            link = f"{url}/go/{items[0][2]['id']}" if (url and items[0][2]) else url
+            messages = [text_template(f"📰 {today} 영업 브리핑\n\n" + "\n".join(t for t, _, _ in items[:4]), link)]
         else:
-            items    = generate_brief(watch, general)
-            header   = f"📰 [{today} 영업 브리핑] 관심기업 {len(watch)}건"
-            messages = build_messages(header, items, url)
+            messages = build_messages(f"📰 {today} 영업 브리핑", items, url)
 
-        for text, link, _ in messages:
-            print("-" * 40 + f"\n{text}\n({len(text)}자) → {link or '(링크 없음)'}")
+        for m in messages:
+            print("-" * 40 + "\n" + _describe(m))
         if dry_run:
             print("\n[dry-run] 발송하지 않음")
             return
 
         token = get_access_token(conn)
-        for text, link, button in messages:
-            send_kakao(token, text, link, button)
+        for m in messages:
+            send_kakao(token, m)
         print(f"\n카카오톡 {len(messages)}건 발송 완료")
     finally:
         conn.close()
