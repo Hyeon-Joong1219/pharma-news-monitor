@@ -9,7 +9,7 @@ import logging as _logging
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import psycopg2
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request
 from werkzeug.exceptions import HTTPException
 from db import get_db, init_db
 from kwmatch import contains_keyword
@@ -204,6 +204,23 @@ def api_health():
         "last_fetched_at": last.isoformat() if isinstance(last, datetime.datetime) else None,
         "hours_since_last_fetch": stale_hours,
     })
+
+
+@app.route("/go/<int:article_id>")
+def go_article(article_id):
+    """카카오톡 브리핑의 '기사 보기' 버튼용 짧은 이동 주소.
+    원문 링크가 200자를 넘는 경우가 많아(카톡 텍스트 한도) 기사 ID로 리다이렉트한다."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT link FROM articles WHERE id = %s", (article_id,))
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    link = (row or {}).get("link") or ""
+    if not link.startswith(("http://", "https://")):
+        abort(404)
+    return redirect(link, code=302)
 
 
 @app.route("/")
