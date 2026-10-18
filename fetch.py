@@ -12,9 +12,10 @@ import requests
 import urllib3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
+from urllib.parse import quote
 from psycopg2.extras import execute_values
 from db import get_db, init_db
-from kwmatch import match_keywords, weighted_score
+from kwmatch import match_keywords, weighted_score, contains_name
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 _TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single"
 _MAX_WORKERS   = 12
 _FEED_TIMEOUT  = 20
+_USER_AGENT    = "Mozilla/5.0 (compatible; pharma-news-monitor)"
 
 # ── 수집 단계 필터 상수 ────────────────────────────────────────────
 # dedicated 피드: 관련성 점수가 이 이하면 명백한 비제약 기사로 판단 → 저장 안 함
@@ -164,6 +166,57 @@ def decode_gnews_url(url: str) -> str:
 
 # ── 설정 로드 ────────────────────────────────────────────────────
 
+# Google News 검색은 기간 지정이 없으면 관련도순이라 결과 100개 대부분이 몇 달~몇 년 전
+# 기사였음 (2026-10 확인: 한국경제 최신 결과가 3주 전, 헬스코리아뉴스는 2018년).
+# fetch가 3시간 주기이므로 최근 2일로 제한하면 누락 없이 최신 기사만 받는다.
+_GNEWS_RECENCY = "when:2d"
+_GNEWS_SEARCH  = {
+    "ko": "https://news.google.com/rss/search?q={q}&hl=ko&gl=KR&ceid=KR:ko",
+    "en": "https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en",
+}
+_WATCH_CHUNK   = 8     # Google News 검색 1회에 OR로 묶을 이름 수
+# Google News 제목 끝의 ' - 매체명' (직접 수집한 같은 기사와 중복 판정하려면 제거해야 함)
+_GNEWS_SUFFIX_RE = re.compile(r"\s+-\s+[^-]{1,30}$")
+
+
+def with_recency(url: str) -> str:
+    if "news.google.com/rss/search?q=" not in url or "when%3A" in url or "when:" in url:
+        return url
+    return url.replace("search?q=", f"search?q={quote(_GNEWS_RECENCY)}+", 1)
+
+
+def load_watchlist() -> dict:
+    """워치리스트 이름을 종류별로 반환 {'company': [...], 'competitor': [...], 'topic': [...]}."""
+    try:
+        conn = get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT keyword, COALESCE(kind, 'company') AS kind FROM watchlist")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"워치리스트 로드 실패 (고객사·경쟁사 검색 생략): {e}")
+        return {}
+    by_kind: dict = {}
+    for r in rows:
+        by_kind.setdefault(r["kind"], []).append(r["keyword"])
+    return by_kind
+
+
+def watch_search_urls(names: list, lang: str = "ko", context: str = "") -> list:
+    """이름(고객사·경쟁사)으로 Google News를 검색하는 URL 목록 — 피드 목록에 없는
+    매체의 기사도 수집한다. 국내 검색은 한글명만, 해외 검색은 영문명만 사용
+    (국내 매체는 한글명으로 보도하므로 영문명은 오탐·중복만 늘림).
+    context: 검색어에 AND로 붙일 조건 (예: 해외 경쟁사는 주가·실적 기사가 대부분이라 공정 키워드로 한정)."""
+    names = [n for n in names if n.isascii() == (lang == "en")]
+    urls = []
+    for i in range(0, len(names), _WATCH_CHUNK):
+        q = " OR ".join(f'"{n}"' for n in names[i:i + _WATCH_CHUNK])
+        urls.append(_GNEWS_SEARCH[lang].format(q=quote(f"({q}) {context}".strip())))
+    return urls
+
+
 def load_config():
     with open("feeds.yaml", encoding="utf-8") as f:
         feeds = yaml.safe_load(f)["feeds"]
@@ -185,28 +238,45 @@ def _quick_relevance(text: str, rel_weights: dict) -> float:
 
 # ── 단일 피드 수집 (스레드 단위) ─────────────────────────────────
 
+def _parse_entries(urls: list) -> list:
+    """URL들의 엔트리를 합쳐 반환. 전부 실패했을 때만 예외."""
+    entries, errors = [], []
+    for u in urls:
+        # feedparser 기본 User-Agent를 차단하고 HTML을 돌려주는 매체가 있음 (헬스코리아뉴스)
+        parsed = feedparser.parse(with_recency(u), agent=_USER_AGENT)
+        if parsed.bozo and not parsed.entries:
+            errors.append(str(parsed.get("bozo_exception", "empty feed")))
+            continue
+        entries.extend(parsed.entries)
+    if errors and not entries:
+        raise Exception(errors[0])
+    return entries
+
+
 def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
-                      rel_weights: dict) -> tuple:
+                      rel_weights: dict, companies: list = ()) -> tuple:
     """
     피드 1개를 수집해 DB에 저장.
     반환: (result_dict, saved_count)
     각 스레드가 독립적인 DB 연결을 사용한다.
 
     수집 단계 2중 필터:
+      [고객사검색] 제목에 고객사명 없으면 → 저장 안 함 (Google 검색 오탐)
       [Dedicated]  quick_relevance < -5  → 저장 안 함 (명백 비제약)
-      [Non-ded]    topic 키워드 없으면  → 저장 안 함 (entity만으로는 부족)
+      [Non-ded]    topic 키워드·고객사명 없으면 → 저장 안 함 (entity만으로는 부족)
       [공통]       body 길이 < 30      → 저장 안 함 (내용 없는 엔트리)
     """
     all_kws   = topic_kws + entity_kws
     name      = feed["name"]
-    url       = feed["url"]
+    urls      = feed.get("urls") or [feed["url"]]
     lang      = feed.get("lang", "")
     dedicated = feed.get("dedicated", False)
+    watch     = bool(feed.get("watchlist_search"))
+    names     = feed.get("names", [])   # 검색 피드가 찾는 이름 (고객사 또는 경쟁사)
+    comp_low  = [c.lower() for c in companies]
 
     try:
-        parsed = feedparser.parse(url)
-        if parsed.bozo and not parsed.entries:
-            raise Exception(str(parsed.get("bozo_exception", "empty feed")))
+        entries = _parse_entries(urls)
 
         skipped_short  = 0
         skipped_filter = 0
@@ -214,12 +284,14 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
         seen_hashes: set = set()
         seen_titles: set = set()
 
-        for entry in parsed.entries:
+        for entry in entries:
             title     = strip_html((entry.get("title") or "").strip())
             link      = decode_gnews_url((entry.get("link") or "").strip())
             summary   = strip_html((entry.get("summary") or entry.get("description") or "").strip())
             published = (entry.get("published") or entry.get("updated") or "").strip()
 
+            if watch:
+                title = _GNEWS_SUFFIX_RE.sub("", title)
             if not title or not link:
                 continue
 
@@ -231,7 +303,15 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
                 continue
 
             # ── 피드 타입별 필터 ──────────────────────────────────
-            if dedicated:
+            if watch:
+                # Google은 본문·관련 키워드까지 넓게 매칭하므로 제목에 회사명이 있는 기사만
+                title_low = title.lower()
+                matched   = [n for n in names if contains_name(title_low, n.lower())]
+                if not matched:
+                    skipped_filter += 1
+                    continue
+                should_save = True
+            elif dedicated:
                 # 전문 매체도 명백한 비제약 콘텐츠는 quick-filter
                 quick_rel = _quick_relevance(body, rel_weights)
                 if quick_rel < _DEDICATED_REL_THRESHOLD:
@@ -243,10 +323,14 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
                 matched_t_title = match_keywords(title, topic_kws)   # 제목에서만
                 matched_t_body  = match_keywords(body, topic_kws)    # 제목+요약 전체
                 matched_e       = match_keywords(body, entity_kws)
-                matched         = matched_t_body + matched_e
+                body_low        = body.lower()
+                matched_c       = [c for c, cl in zip(companies, comp_low) if contains_name(body_low, cl)]
+                matched         = matched_t_body + matched_e + matched_c
                 # 저장 조건: 제목에 topic kw 1개 이상  OR  전체에 topic kw 2개 이상
                 # → "신약"이 요약에 1번만 등장하는 비제약 기사 차단
-                should_save = len(matched_t_title) >= 1 or len(matched_t_body) >= 2
+                # 담당 고객사가 언급된 기사는 topic 키워드가 없어도 저장
+                should_save = (len(matched_t_title) >= 1 or len(matched_t_body) >= 2
+                               or bool(matched_c))
 
             if not should_save:
                 skipped_filter += 1
@@ -294,10 +378,11 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
                 with conn.cursor() as cur:
                     # hash는 title|link 기반이라 링크 형식이 바뀌면(예: Google News
                     # 디코딩 도입) 같은 기사가 재저장될 수 있음 → 제목+소스로 2차 방어
+                    # 고객사 검색 기사는 다른 피드가 이미 같은 제목으로 수집했으면 건너뜀
                     cur.execute(
                         "SELECT hash, title FROM articles "
-                        "WHERE hash = ANY(%s) OR (source = %s AND title = ANY(%s))",
-                        ([c["hash"] for c in candidates], name,
+                        "WHERE hash = ANY(%s) OR ((source = %s OR %s) AND title = ANY(%s))",
+                        ([c["hash"] for c in candidates], name, watch,
                          [c["title"] for c in candidates]),
                     )
                     existing = cur.fetchall()
@@ -344,10 +429,10 @@ def fetch_single_feed(feed: dict, topic_kws: list, entity_kws: list,
             detail += f" (짧은기사 {skipped_short}건 제외)"
         if skipped_filter:
             detail += f" (비제약 {skipped_filter}건 제외)"
-        logger.info(f"[OK] {marker} {name}: {saved}개 저장 / {len(parsed.entries)}개 수신{detail}")
+        logger.info(f"[OK] {marker} {name}: {saved}개 저장 / {len(entries)}개 수신{detail}")
         return (
             {"name": name, "status": "ok", "saved": saved,
-             "total": len(parsed.entries), "dedicated": dedicated},
+             "total": len(entries), "dedicated": dedicated},
             saved,
         )
 
@@ -401,15 +486,30 @@ def fetch_feeds():
 
     init_db()
     socket.setdefaulttimeout(_FEED_TIMEOUT)
+    watchlist = load_watchlist()
+    companies = watchlist.get("company", [])
+
+    # 고객사·경쟁사 검색 피드는 URL을 워치리스트에서 생성 (이름이 없으면 생략)
+    expanded = []
+    for feed in feeds:
+        kind = feed.get("watchlist_search")
+        if kind:
+            names = watchlist.get("company" if kind is True else kind, [])
+            urls  = watch_search_urls(names, feed.get("lang", "ko"), feed.get("search_context", ""))
+            if not urls:
+                continue
+            feed = {**feed, "urls": urls, "names": names}
+        expanded.append(feed)
+    feeds = expanded
 
     results     = []
     total_saved = 0
 
-    logger.info(f"피드 수집 시작: {len(feeds)}개 피드, 최대 {_MAX_WORKERS}개 병렬")
+    logger.info(f"피드 수집 시작: {len(feeds)}개 피드, 최대 {_MAX_WORKERS}개 병렬 (고객사 {len(companies)}개)")
 
     with ThreadPoolExecutor(max_workers=_MAX_WORKERS, thread_name_prefix="feed") as pool:
         futures = {
-            pool.submit(fetch_single_feed, feed, topic_kws, entity_kws, rel_weights): feed["name"]
+            pool.submit(fetch_single_feed, feed, topic_kws, entity_kws, rel_weights, companies): feed["name"]
             for feed in feeds
         }
         for future in as_completed(futures):

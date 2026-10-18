@@ -35,6 +35,20 @@ def contains_keyword(text_lower: str, kw_lower: str) -> bool:
     return kw_lower in text_lower
 
 
+@lru_cache(maxsize=4096)
+def _name_pattern(name: str):
+    if name.isascii():
+        # 영문 회사명은 길이와 무관하게 단어 경계 필수 ('EnCell' ⊂ 'ViGenCell' 오탐)
+        return re.compile(r"(?<![0-9a-z])" + re.escape(name) + r"(?![0-9a-z])")
+    # 한글 회사명은 앞쪽만 경계 검사 ('프로젠' ⊂ '에이프로젠' 오탐) — 뒤는 조사가 붙으므로 허용
+    return re.compile(r"(?<![0-9a-z가-힣])" + re.escape(name))
+
+
+def contains_name(text_lower: str, name_lower: str) -> bool:
+    """회사명 매칭 — contains_keyword보다 엄격 (다른 회사명 안에 포함된 경우 제외)."""
+    return _name_pattern(name_lower).search(text_lower) is not None
+
+
 def match_keywords(text: str, keywords: list) -> list:
     """본문에 매칭된 키워드 목록 반환 (키워드는 이미 소문자)."""
     t = text.lower()

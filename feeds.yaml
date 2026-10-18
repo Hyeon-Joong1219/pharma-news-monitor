@@ -119,7 +119,8 @@ feeds:
     dedicated: true
 
   - name: 헬스코리아뉴스     # 아웃룩 7위 (310건)
-    url: https://news.google.com/rss/search?q=site:hkn24.com&hl=ko&gl=KR&ceid=KR:ko
+    # Google News 경유 결과가 2018년 기사뿐이라 2026-10 직접 RSS로 전환
+    url: https://www.hkn24.com/rss/allArticle.xml
     lang: ko
     dedicated: true
 
@@ -138,10 +139,11 @@ feeds:
     lang: ko
     dedicated: true
 
-  - name: 메디칼타임즈       # 아웃룩 26위 (106건)
-    url: https://news.google.com/rss/search?q=site:medicaltimes.com&hl=ko&gl=KR&ceid=KR:ko
-    lang: ko
-    dedicated: true
+  # 메디칼타임즈: 직접 RSS 없음(404) + Google News 최근 색인 0건 → 2026-10 비활성화
+  # - name: 메디칼타임즈       # 아웃룩 26위 (106건)
+  #   url: https://news.google.com/rss/search?q=site:medicaltimes.com&hl=ko&gl=KR&ceid=KR:ko
+  #   lang: ko
+  #   dedicated: true
 
   - name: e헬스통신          # 아웃룩 34위 (91건)
     url: https://news.google.com/rss/search?q=site:e-healthnews.com&hl=ko&gl=KR&ceid=KR:ko
@@ -178,12 +180,37 @@ feeds:
     lang: ko
     dedicated: true
 
+  # ── 담당 고객사·경쟁사 검색 ───────────────────────────────────
+  # URL 없음: fetch.py가 워치리스트(kind=company/competitor) 이름으로 Google News
+  # OR 검색 URL을 만들어 수집 → 피드 목록에 없는 매체의 기사도 잡는다.
+  # 제목에 이름이 있는 기사만 저장, 다른 피드에 이미 있는 기사는 건너뜀.
+  # lang=ko는 한글명, lang=en은 영문명으로 검색
+  - name: 고객사 뉴스검색
+    watchlist_search: company
+    lang: ko
+    dedicated: true
+
+  # 경쟁사(바이오공정 소모품·장비·CDMO) — 기존 매체에는 90일간 싸이티바·사토리우스
+  # 기사가 0건이라 검색 피드로만 수집 가능 (2026-10 확인)
+  - name: 경쟁사 뉴스검색
+    watchlist_search: competitor
+    lang: ko
+    dedicated: true
+
+  - name: 경쟁사 뉴스검색(해외)
+    watchlist_search: competitor
+    # 조건 없이 검색하면 주가·실적 프리뷰·동명 부동산 기사가 대부분이라 공정 분야로 한정
+    search_context: '(bioprocess OR biomanufacturing OR CDMO OR biologics OR "cell and gene therapy" OR bioproduction)'
+    lang: en
+    dedicated: true
+
   # ══════════════════════════════════════════════════════════════
   # [국내 Tier-2] 경제/종합지 — dedicated: false
   # 아웃룩 분석 기반 선정 / AI 승인 전 hidden=1 / title 키워드 필수
   # ══════════════════════════════════════════════════════════════
   - name: 더벨               # 아웃룩 8위 (306건) — 제약 딜·투자 심층
-    url: https://news.google.com/rss/search?q=site:thebell.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    # '제약 바이오' 두 단어 AND 검색은 최근 기사가 거의 안 걸려 '바이오' 단일 검색으로 변경 (2026-10)
+    url: https://news.google.com/rss/search?q=site:thebell.co.kr+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
     lang: ko
     dedicated: false
 
@@ -253,7 +280,8 @@ feeds:
     dedicated: false
 
   - name: 더구루             # 아웃룩 (61건) — 글로벌 제약 딜
-    url: https://news.google.com/rss/search?q=site:theguru.co.kr+%EC%A0%9C%EC%95%BD+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
+    # 더벨과 같은 이유로 '바이오' 단일 검색 (2026-10)
+    url: https://news.google.com/rss/search?q=site:theguru.co.kr+%EB%B0%94%EC%9D%B4%EC%98%A4&hl=ko&gl=KR&ceid=KR:ko
     lang: ko
     dedicated: false
 
@@ -297,10 +325,11 @@ feeds:
     lang: en
     dedicated: true
 
-  - name: Endpoints News
-    url: https://news.google.com/rss/search?q=site:endpts.com+biotech+pharma+FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: true
+  # Endpoints News: 직접 RSS 403 + Google News 최근 색인 0건 → 2026-10 비활성화
+  # - name: Endpoints News
+  #   url: https://news.google.com/rss/search?q=site:endpts.com+biotech+pharma+FDA&hl=en-US&gl=US&ceid=US:en
+  #   lang: en
+  #   dedicated: true
 
   - name: STAT News
     url: https://www.statnews.com/feed/
@@ -348,13 +377,15 @@ feeds:
     lang: en
     dedicated: false
 
-  - name: Bloomberg
-    url: https://news.google.com/rss/search?q=site:bloomberg.com+pharma+biotech+FDA&hl=en-US&gl=US&ceid=US:en
-    lang: en
-    dedicated: false
+  # Bloomberg: Google News 최근 결과가 비제약 기사뿐(유료벽 색인 제한) → 2026-10 비활성화
+  # - name: Bloomberg
+  #   url: https://news.google.com/rss/search?q=site:bloomberg.com+pharma+biotech+FDA&hl=en-US&gl=US&ceid=US:en
+  #   lang: en
+  #   dedicated: false
 
   - name: WSJ
-    url: https://news.google.com/rss/search?q=site:wsj.com+pharma+FDA+biotech&hl=en-US&gl=US&ceid=US:en
+    # 세 단어 AND 검색은 최근 기사가 없어 OR로 변경 (2026-10)
+    url: https://news.google.com/rss/search?q=site:wsj.com+pharma+OR+biotech+OR+FDA&hl=en-US&gl=US&ceid=US:en
     lang: en
     dedicated: false
 

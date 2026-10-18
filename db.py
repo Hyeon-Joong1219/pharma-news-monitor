@@ -104,6 +104,8 @@ def _create_schema(conn):
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
             )
         """)
+        # company=담당 고객사(이름 정밀 매칭·브리핑 전량 전달), competitor=경쟁사, topic=관심 주제(ADC 등)
+        cur.execute("ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'company'")
         # 피드별 수집 상태 (fetch.py가 매 실행 upsert)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS feed_health (
