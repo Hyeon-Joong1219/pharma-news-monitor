@@ -2,7 +2,7 @@ name: Fetch News
 
 on:
   schedule:
-    - cron: '0 */3 * * *'   # 3시간마다 (UTC 기준 0, 3, 6, 9, 12, 15, 18, 21시)
+    - cron: '23 */3 * * *'  # 3시간마다 (UTC 0, 3, …, 21시 23분 — 예약이 몰리는 정각을 피함)
   workflow_dispatch:          # 수동 실행 버튼
 
 concurrency:
@@ -37,6 +37,20 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python fetch.py
+
+      # 카카오 브리핑 예약(kakao-brief.yml)이 GitHub 사정으로 누락돼도 하루 한 번은 반드시 발송되도록,
+      # 수집 직후 '평일 06시 이후 + 오늘 미발송'이면 여기서 대신 보낸다 (이미 보냈으면 바로 종료)
+      - name: Send Kakao brief if due
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          DATABASE_URL:        ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY:        ${{ secrets.GROQ_API_KEY }}
+          KAKAO_REST_API_KEY:  ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          DASHBOARD_URL:       ${{ vars.DASHBOARD_URL }}
+        run: python kakao_brief.py --if-due
 
       # GitHub은 저장소에 60일간 커밋이 없으면 예약(schedule) 워크플로를 자동
       # 비활성화한다(disabled_inactivity). 2026-09 실제로 이 때문에 수집이 멈추고

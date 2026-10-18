@@ -13,7 +13,9 @@
   DASHBOARD_URL           (선택) 대시보드 주소. 카카오 앱 [플랫폼 > Web]에 도메인 등록 필요.
                           없으면 링크 버튼 없이 발송
 
-사용법: python kakao_brief.py [--dry-run]   (--dry-run: 발송 없이 콘솔 출력만)
+사용법: python kakao_brief.py [--dry-run] [--if-due]
+  --dry-run  발송 없이 콘솔 출력만
+  --if-due   평일 06시 이후 + 오늘 미발송일 때만 발송 (예약 실행용)
 """
 import datetime
 import json
@@ -78,6 +80,20 @@ def brief_since(conn) -> datetime.datetime:
         monday = (now + datetime.timedelta(hours=9)).weekday() == 0
         return now - datetime.timedelta(hours=72 if monday else 24)
     return max(last, now - MAX_WINDOW)
+
+
+def is_due(conn) -> bool:
+    """--if-due 실행 시 발송 여부: 평일(KST) 06시 이후이고 오늘 아직 안 보냈을 때만.
+    GitHub 예약 실행은 1~2시간씩 밀리거나 건너뛰어져(2026-10-19 첫 예약 발송 누락)
+    브리핑 예약과 3시간마다 도는 수집 작업 양쪽에서 이 조건으로 호출해 하루 한 번은 반드시 보낸다."""
+    now_kst = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+    if now_kst.weekday() >= 5 or now_kst.hour < 6:
+        return False
+    _ensure_log_table(conn)
+    with conn.cursor() as cur:
+        cur.execute("SELECT MAX(sent_at) AS t FROM kakao_brief_log")
+        last = cur.fetchone()["t"]
+    return last is None or (last + datetime.timedelta(hours=9)).date() < now_kst.date()
 
 
 def record_sent(conn):
@@ -517,6 +533,9 @@ def main():
 
     conn = get_db()
     try:
+        if "--if-due" in sys.argv and not is_due(conn):
+            print("발송 대상 아님 (주말·06시 이전이거나 오늘 이미 발송) — 종료")
+            return
         since = brief_since(conn)
         span  = datetime.datetime.utcnow() - since
         # 주말·연휴를 건너뛴 날은 다룬 기간을 헤더에 표시

@@ -2,8 +2,15 @@ name: Kakao Morning Brief
 
 on:
   schedule:
-    - cron: '30 22 * * 0-4'   # 평일 KST 07:30 (UTC 일~목 22:30). GitHub 대기열로 수~수십 분 지연될 수 있음
+    # 평일 KST 06:17 (UTC 일~목 21:17). GitHub 예약은 1~2시간 밀리거나 건너뛰어질 수 있어
+    # (2026-10-19 07:30 예약이 실행되지 않음) 출근 전 도착하도록 앞당기고 정각을 피함.
+    # 이 예약이 누락돼도 fetch.yml이 매 실행마다 --if-due로 대신 발송한다.
+    - cron: '17 21 * * 0-4'
   workflow_dispatch:           # 수동 실행 버튼
+
+concurrency:
+  group: pharma-db-write    # fetch.yml과 같은 그룹 → 수집 직후 실행되고, 동시 발송(중복) 방지
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -34,4 +41,5 @@ jobs:
           KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           DASHBOARD_URL:       ${{ vars.DASHBOARD_URL }}
-        run: python kakao_brief.py
+        # 예약 실행은 '평일 06시 이후 + 오늘 미발송'일 때만, 수동 실행은 항상 발송
+        run: python kakao_brief.py ${{ github.event_name == 'schedule' && '--if-due' || '' }}

@@ -29,7 +29,9 @@ from db import get_db, execute_batch_update
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE            = 15
+# 프롬프트 지시문(약 1.1천 토큰)이 배치마다 반복되므로 배치를 키워 일일 토큰을 아낀다 (15→25)
+BATCH_SIZE            = 25
+BATCH_INTERVAL        = 8.0  # 배치 사이 대기(초) — 분당 토큰 한도(8천)를 덜 두드리도록
 DEDICATED_THRESHOLD   = 2    # dedicated 소스: 이 미만만 hidden
 NON_DED_THRESHOLD     = 5    # non-dedicated: 이 미만 hidden (4→5로 강화)
 
@@ -100,9 +102,15 @@ def _hard_exclude(article: dict) -> bool:
             if not rule["rescue"] or not any(kw.lower() in text for kw in rule["rescue"]):
                 return True
     return False
-BACKFILL_LIMIT        = 200
+# 백필은 최근 3일·최대 60건만 — 예전엔 날짜 제한 없이 매 실행(하루 8회) 200건씩 재시도해
+# gpt-oss-20b 일일 한도(20만 토큰)를 소진, 분류가 밀리면 백필이 더 늘어나는 악순환이 있었음 (2026-10-19)
+BACKFILL_LIMIT        = 60
+BACKFILL_DAYS         = 3
 MAX_CONSECUTIVE_FAILS = 3    # 연속 API 실패 시 조기 중단 (Groq 장애·한도 초과 대비)  # 미분류(ai_classified=0) 기사 한 번에 재처리 최대 건수
 MODEL                 = "openai/gpt-oss-20b"
+# 일일 한도 소진 시 대체 모델 (Groq는 모델별로 한도가 따로라 분류가 멈추지 않게 함)
+FALLBACK_MODEL        = "qwen/qwen3.8-27b"
+_active_model         = [MODEL]   # 실행 중 한도 소진이 확인되면 FALLBACK_MODEL로 교체
 
 
 def _load_api_key() -> str:
@@ -131,8 +139,11 @@ def _get_client():
             "  2. API Keys 메뉴에서 키 생성\n"
             "  3. .env 파일에 GROQ_API_KEY=gsk_... 추가"
         )
-    # timeout/max_retries 명시: 응답 지연 시 배치 하나가 수 분씩 멈추지 않도록 함
-    return Groq(api_key=api_key, timeout=45, max_retries=2)
+    # timeout: 응답 지연 시 배치 하나가 수 분씩 멈추지 않도록 함
+    # max_retries=5: 무료 한도가 분당 8천 토큰이라 배치(약 3.5천 토큰)가 2~3개만 연달아 가도 429가 남.
+    #   SDK가 retry-after만큼 기다렸다 재시도하므로, 예전(2회)처럼 연속 실패로 분류가 중단되지 않게 한다
+    #   (2026-10 확인: 이 때문에 Daily Cleanup이 매일 실패하고 미분류 기사가 쌓였음)
+    return Groq(api_key=api_key, timeout=45, max_retries=5)
 
 
 def _load_dedicated_sources() -> set:
@@ -223,26 +234,15 @@ def _classify_batch(client, articles: list) -> dict:
     )
 
     try:
-        # gpt-oss-20b는 추론 모델 — max_tokens가 낮으면 보이지 않는 추론 토큰만
-        # 소비하고 content가 빈 문자열로 반환되어(finish_reason=length) 배치
-        # 전체가 미분류로 남는 문제가 있었음. reasoning_effort를 낮추고
-        # max_tokens를 15건 배치 기준 충분히 크게 잡는다.
-        resp = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1200,
-            temperature=0,
-            reasoning_effort="low",
-        )
+        resp = _create(client, prompt)
         raw = (resp.choices[0].message.content or "").strip()
         if not raw:
             logger.warning("Groq 분류 실패 (배치): 빈 응답")
             return {}
-        # 마크다운 코드블록 제거
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:])
-            raw = raw.rsplit("```", 1)[0].strip()
-        data = json.loads(raw)
+        # 추론 블록(<think>)·마크다운 코드블록·앞뒤 설명문 제거 (대체 모델은 JSON 앞에 문장을 붙이기도 함)
+        raw = raw.split("</think>")[-1]
+        start, end = raw.find("["), raw.rfind("]")
+        data = json.loads(raw[start:end + 1] if start >= 0 and end > start else raw)
         # LLM이 잘못된 id를 반환해도 배치 전체가 무효화되지 않도록 개별 검증
         result = {}
         for item in data:
@@ -256,6 +256,30 @@ def _classify_batch(client, articles: list) -> dict:
     except Exception as e:
         logger.warning(f"Groq 분류 실패 (배치): {e}")
         return {}
+
+
+def _create(client, prompt: str):
+    """분류 호출. 기본 모델의 일일 토큰 한도(TPD)가 소진되면 대체 모델로 바꿔 한 번 더 시도."""
+    from groq import RateLimitError
+    for _ in range(2):
+        model = _active_model[0]
+        kwargs = dict(model=model, messages=[{"role": "user", "content": prompt}], temperature=0)
+        if model.startswith("openai/gpt-oss"):
+            # gpt-oss는 추론 모델 — max_tokens가 낮으면 보이지 않는 추론 토큰만 소비하고
+            # content가 빈 문자열로 반환되어 배치 전체가 미분류로 남는 문제가 있었음
+            kwargs.update(max_tokens=1500, reasoning_effort="low")
+        else:
+            # qwen은 분당 출력 토큰 한도가 1천이라 max_tokens를 그 아래로, 추론은 끈다
+            # (25건 점수 JSON은 실제로 300토큰 안팎)
+            kwargs.update(max_tokens=900, reasoning_effort="none")
+        try:
+            return client.chat.completions.create(**kwargs)
+        except RateLimitError as e:
+            if "tokens per day" in str(e) and model != FALLBACK_MODEL:
+                logger.warning(f"{model} 일일 한도 소진 → {FALLBACK_MODEL}로 전환")
+                _active_model[0] = FALLBACK_MODEL
+                continue
+            raise
 
 
 def _apply_hard_exclude(conn, articles: list) -> list:
@@ -310,8 +334,9 @@ def _run_backfill(client, dedicated: set) -> int:
             cur.execute(
                 "SELECT id, title, title_ko, summary, source, lang FROM articles "
                 "WHERE (ai_classified IS NULL OR ai_classified = 0) "
+                "AND fetched_at >= NOW() - make_interval(days => %s) "
                 "ORDER BY fetched_at DESC LIMIT %s",
-                (BACKFILL_LIMIT,),
+                (BACKFILL_DAYS, BACKFILL_LIMIT),
             )
             rows = cur.fetchall()
 
@@ -336,7 +361,7 @@ def _run_backfill(client, dedicated: set) -> int:
                 if fails >= MAX_CONSECUTIVE_FAILS:
                     logger.error(f"[Backfill] API {fails}회 연속 실패 — 중단 (다음 실행에서 재시도)")
                     break
-                time.sleep(2.0)
+                time.sleep(BATCH_INTERVAL)
                 continue
             fails = 0
             updates = []
@@ -350,7 +375,7 @@ def _run_backfill(client, dedicated: set) -> int:
                     hidden_cnt += 1
                 updates.append((score * 10, hidden, a["id"]))
             _save_scores(conn, updates)
-            time.sleep(2.0)
+            time.sleep(BATCH_INTERVAL)
 
         logger.info(f"[Backfill] 완료 — hidden: {hidden_cnt}건 / {len(rows)}건")
         return hidden_cnt
@@ -422,7 +447,7 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
                 if fails >= MAX_CONSECUTIVE_FAILS:
                     # Groq 장애/한도 초과 시 남은 배치를 계속 두드리며 CI 시간을 소진하지 않음
                     raise RuntimeError(f"Groq API {fails}회 연속 실패 — AI 분류 중단")
-                time.sleep(2.0)
+                time.sleep(BATCH_INTERVAL)
                 continue
             fails = 0
             updates = []
@@ -437,7 +462,7 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
                 updates.append((score * 10, hidden, a["id"]))
             _save_scores(conn, updates)
             logger.info(f"  배치 {batch_num} 완료 ({len(batch)}건)")
-            time.sleep(2.0)
+            time.sleep(BATCH_INTERVAL)
     finally:
         conn.close()
 
