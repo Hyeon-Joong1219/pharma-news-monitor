@@ -111,6 +111,7 @@ MODEL                 = "openai/gpt-oss-20b"
 # 일일 한도 소진 시 대체 모델 (Groq는 모델별로 한도가 따로라 분류가 멈추지 않게 함)
 FALLBACK_MODEL        = "qwen/qwen3.8-27b"
 _active_model         = [MODEL]   # 실행 중 한도 소진이 확인되면 FALLBACK_MODEL로 교체
+_usage                = [0]       # 이번 실행의 누적 토큰 (로그로 일일 한도 대비 사용량 확인용)
 
 
 def _load_api_key() -> str:
@@ -164,7 +165,8 @@ def _classify_batch(client, articles: list) -> dict:
     for i, a in enumerate(articles):
         title_orig = (a.get("title") or "")[:150]
         title_ko   = (a.get("title_ko") or "")[:100]
-        summary    = (a.get("summary") or "")[:250]   # 150 → 250으로 확대
+        # 관련성 판정엔 제목+요약 앞부분이면 충분 — 기사당 입력이 일일 토큰의 대부분이라 120자로 제한
+        summary    = (a.get("summary") or "")[:120]
         lang       = a.get("lang", "")
         source     = (a.get("source") or "")[:25]
 
@@ -175,7 +177,7 @@ def _classify_batch(client, articles: list) -> dict:
         else:
             title_str = title_ko or title_orig
 
-        lines.append(f'{i+1}. [{source}] {title_str} | {summary[:220]}')
+        lines.append(f'{i+1}. [{source}] {title_str} | {summary}')
 
     prompt = (
         "You are a strict gatekeeper for a Korean pharmaceutical/biotech industry intelligence system.\n"
@@ -218,16 +220,9 @@ def _classify_batch(client, articles: list) -> dict:
         "  · 'drug', 'hospital', 'health' alone do NOT guarantee high score — context matters\n"
         "  · When AI article mentions drug discovery/development angle → 5+\n"
         "  · General economic or political news even mentioning pharma in passing → 2-3\n\n"
-        "EXAMPLES (사용 금지 — 참고용):\n"
-        "  '홈플러스 인수합병' → 0  |  '이마트 실적' → 0  |  'STX 조선 합병' → 0\n"
-        "  'SK하이닉스 HBM 투자' → 0  |  '현대차 전기차 판매' → 0  |  '크래프톤 게임' → 0\n"
-        "  '사모펀드 PEF 비제약 M&A' → 0  |  '한약제제 한방치료 한의원' → 0\n"
-        "  '랜섬웨어 해킹 사이버보안 침해' → 0  |  '챗GPT LLM 생성형AI 서비스' → 0\n"
-        "  '포스코 탄소섬유 소재산업' → 0  |  '배터리 양극재 음극재' → 0\n"
-        "  'FDA approves Pfizer cancer drug' → 10  |  '한미약품 기술이전 계약' → 10\n"
-        "  '셀트리온 바이오시밀러 유럽 승인' → 10  |  '알테오젠 ADC 플랫폼 계약' → 9\n"
-        "  '연합뉴스 경기 침체 우려' → 0  |  '부동산 청약 열기' → 0\n"
-        "  'AI 신약개발 플랫폼 임상' → 7  |  'AI 보안 솔루션 출시' → 0\n\n"
+        # 0점 예시는 위 0-2 목록과 같은 내용이라 생략 (배치마다 반복되는 토큰 절감)
+        "EXAMPLES: 'FDA approves Pfizer cancer drug' → 10 | '한미약품 기술이전 계약' → 10 | "
+        "'셀트리온 바이오시밀러 유럽 승인' → 10 | 'AI 신약개발 플랫폼 임상' → 7 | 'AI 보안 솔루션 출시' → 0\n\n"
         "Articles:\n" + "\n".join(lines) + "\n\n"
         "Reply with JSON array ONLY (no explanation, no markdown):\n"
         '[{"id":1,"score":8},{"id":2,"score":2},...]'
@@ -273,7 +268,9 @@ def _create(client, prompt: str):
             # (25건 점수 JSON은 실제로 300토큰 안팎)
             kwargs.update(max_tokens=900, reasoning_effort="none")
         try:
-            return client.chat.completions.create(**kwargs)
+            resp = client.chat.completions.create(**kwargs)
+            _usage[0] += getattr(resp.usage, "total_tokens", 0) or 0
+            return resp
         except RateLimitError as e:
             if "tokens per day" in str(e) and model != FALLBACK_MODEL:
                 logger.warning(f"{model} 일일 한도 소진 → {FALLBACK_MODEL}로 전환")
@@ -323,6 +320,85 @@ def _save_scores(conn, updates: list):
     )
 
 
+REUSE_DAYS = 2   # 이 기간 안에 이미 분류된 같은 사건 기사가 있으면 점수를 그대로 쓴다
+
+
+def _plan(conn, articles: list) -> tuple:
+    """AI에 보낼 대표 기사와 점수를 재사용할 기사를 나눈다.
+    같은 사건을 여러 매체가 쓰는 경우가 많아(하루 기사의 약 10%) 매번 전부 보내면 토큰 낭비.
+      reused  : {article_id: score(0~10)} — 최근 이미 분류된 같은 사건 기사의 점수
+      reps    : AI에 보낼 기사 목록
+      members : {대표 id: [같은 사건 기사, ...]} — 대표 점수를 그대로 적용"""
+    from dedup import signature, is_same_event
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT title, relevance_score FROM articles WHERE ai_classified = 1 "
+            "AND relevance_score IS NOT NULL AND fetched_at >= NOW() - make_interval(days => %s) "
+            "AND id <> ALL(%s)",
+            (REUSE_DAYS, [a["id"] for a in articles]),
+        )
+        known = [(signature(r["title"]), r["relevance_score"] / 10) for r in cur.fetchall()]
+    reused, reps, members, rep_sigs = {}, [], {}, []
+    for a in articles:
+        sig = signature(a.get("title"))
+        hit = next((score for ks, score in known if is_same_event(ks, sig)), None)
+        if hit is not None:
+            reused[a["id"]] = hit
+            continue
+        rep = next((r for rs, r in rep_sigs if is_same_event(rs, sig)), None)
+        if rep is not None:
+            members[rep["id"]].append(a)
+            continue
+        rep_sigs.append((sig, a))
+        reps.append(a)
+        members[a["id"]] = []
+    return reused, reps, members
+
+
+def _classify_all(conn, client, articles: list, dedicated: set, label: str, abort_on_fail: bool) -> int:
+    """기사 목록을 분류·저장하고 hidden 처리 건수를 반환 (본 분류·백필 공용)."""
+    def _update(a, score):
+        thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
+        return (score * 10, 1 if score < thresh else 0, a["id"])
+
+    reused, reps, members = _plan(conn, articles)
+    by_id = {a["id"]: a for a in articles}
+    updates = [_update(by_id[i], s) for i, s in reused.items()]
+    _save_scores(conn, updates)
+    hidden_cnt = sum(u[1] for u in updates)
+    n_members = sum(len(m) for m in members.values())
+    logger.info(f"{label} 대상 {len(articles)}건 → 점수 재사용 {len(reused)}건, 같은 사건 묶음 {n_members}건, "
+                f"AI 호출 {len(reps)}건 (배치 {BATCH_SIZE}개씩)")
+
+    fails = 0
+    for i in range(0, len(reps), BATCH_SIZE):
+        batch     = reps[i: i + BATCH_SIZE]
+        batch_num = i // BATCH_SIZE + 1
+        scores    = _classify_batch(client, batch)
+        if not scores:
+            logger.warning(f"{label} 배치 {batch_num} API 실패 — 미분류 유지 (다음 실행에서 재시도)")
+            fails += 1
+            if fails >= MAX_CONSECUTIVE_FAILS:
+                if abort_on_fail:
+                    # Groq 장애/한도 초과 시 남은 배치를 계속 두드리며 CI 시간을 소진하지 않음
+                    raise RuntimeError(f"Groq API {fails}회 연속 실패 — AI 분류 중단")
+                logger.error(f"{label} API {fails}회 연속 실패 — 중단 (다음 실행에서 재시도)")
+                break
+            time.sleep(BATCH_INTERVAL)
+            continue
+        fails = 0
+        updates = []
+        for a in batch:
+            if a["id"] in scores:
+                for x in [a] + members[a["id"]]:
+                    updates.append(_update(x, scores[a["id"]]))
+        _save_scores(conn, updates)
+        hidden_cnt += sum(u[1] for u in updates)
+        logger.info(f"{label} 배치 {batch_num} 완료 ({len(batch)}건)")
+        time.sleep(BATCH_INTERVAL)
+    return hidden_cnt
+
+
 def _run_backfill(client, dedicated: set) -> int:
     """
     ai_classified=0 인 기사를 최대 BACKFILL_LIMIT 건 재분류.
@@ -344,39 +420,10 @@ def _run_backfill(client, dedicated: set) -> int:
             return 0
 
         articles = [dict(r) for r in rows]
-        logger.info(f"[Backfill] 미분류 기사 재처리: {len(articles)}건")
-
         # 하드 제외 먼저
         articles = _apply_hard_exclude(conn, articles)
-        hard_blocked = len(rows) - len(articles)
-
-        hidden_cnt = hard_blocked
-        fails = 0
-        for i in range(0, len(articles), BATCH_SIZE):
-            batch  = articles[i: i + BATCH_SIZE]
-            scores = _classify_batch(client, batch)
-            if not scores:
-                logger.warning(f"[Backfill] 배치 {i//BATCH_SIZE+1} API 실패 — 건너뜀")
-                fails += 1
-                if fails >= MAX_CONSECUTIVE_FAILS:
-                    logger.error(f"[Backfill] API {fails}회 연속 실패 — 중단 (다음 실행에서 재시도)")
-                    break
-                time.sleep(BATCH_INTERVAL)
-                continue
-            fails = 0
-            updates = []
-            for a in batch:
-                if a["id"] not in scores:
-                    continue
-                score  = scores[a["id"]]
-                thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
-                hidden = 1 if score < thresh else 0
-                if hidden:
-                    hidden_cnt += 1
-                updates.append((score * 10, hidden, a["id"]))
-            _save_scores(conn, updates)
-            time.sleep(BATCH_INTERVAL)
-
+        hidden_cnt = len(rows) - len(articles)
+        hidden_cnt += _classify_all(conn, client, articles, dedicated, "[Backfill]", abort_on_fail=False)
         logger.info(f"[Backfill] 완료 — hidden: {hidden_cnt}건 / {len(rows)}건")
         return hidden_cnt
     finally:
@@ -397,6 +444,7 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
         return 0
 
     dedicated = _load_dedicated_sources()
+    _usage[0] = 0
 
     from datetime import datetime, timedelta
     cutoff = datetime.utcnow() - timedelta(days=days)
@@ -422,47 +470,14 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
         _run_backfill(client, dedicated)
         return 0
 
-    logger.info(
-        f"AI 관련성 분류 시작: {len(all_articles)}건 "
-        f"(전체 분류 — dedicated 포함, 배치 {BATCH_SIZE}개씩)"
-    )
-
     conn = get_db()
-    hidden_cnt = 0
     try:
         # 1단계: 하드 제외 필터 (AI 생략, 즉시 차단)
-        to_classify = _apply_hard_exclude(conn, all_articles)
+        to_classify  = _apply_hard_exclude(conn, all_articles)
         hard_blocked = len(all_articles) - len(to_classify)
-        hidden_cnt += hard_blocked
-
-        # 2단계: 나머지는 AI 분류
-        fails = 0
-        for i in range(0, len(to_classify), BATCH_SIZE):
-            batch  = to_classify[i: i + BATCH_SIZE]
-            scores = _classify_batch(client, batch)
-            batch_num = i // BATCH_SIZE + 1
-            if not scores:
-                logger.warning(f"  배치 {batch_num} API 실패 — 미분류 유지 (나중에 백필)")
-                fails += 1
-                if fails >= MAX_CONSECUTIVE_FAILS:
-                    # Groq 장애/한도 초과 시 남은 배치를 계속 두드리며 CI 시간을 소진하지 않음
-                    raise RuntimeError(f"Groq API {fails}회 연속 실패 — AI 분류 중단")
-                time.sleep(BATCH_INTERVAL)
-                continue
-            fails = 0
-            updates = []
-            for a in batch:
-                if a["id"] not in scores:
-                    continue
-                score  = scores[a["id"]]
-                thresh = DEDICATED_THRESHOLD if a["source"] in dedicated else NON_DED_THRESHOLD
-                hidden = 1 if score < thresh else 0
-                if hidden:
-                    hidden_cnt += 1
-                updates.append((score * 10, hidden, a["id"]))
-            _save_scores(conn, updates)
-            logger.info(f"  배치 {batch_num} 완료 ({len(batch)}건)")
-            time.sleep(BATCH_INTERVAL)
+        # 2단계: 점수 재사용·같은 사건 묶음 후 나머지만 AI 분류
+        hidden_cnt = hard_blocked + _classify_all(conn, client, to_classify, dedicated,
+                                                  "AI 분류", abort_on_fail=True)
     finally:
         conn.close()
 
@@ -470,6 +485,7 @@ def run_relevance_classification(days: int = 3, force: bool = False) -> int:
 
     # 미분류 백필 (이번 run에서 처리 못한 기간 외 기사)
     backfill_hidden = _run_backfill(client, dedicated)
+    logger.info(f"AI 분류 토큰 사용: {_usage[0]:,} (모델 {_active_model[0]})")
     return hidden_cnt + backfill_hidden
 
 

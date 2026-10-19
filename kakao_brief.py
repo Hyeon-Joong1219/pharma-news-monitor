@@ -195,8 +195,24 @@ def load_articles(conn, since: datetime.datetime) -> tuple:
             general.append(r)
     # 미팅한 고객사 기사를 앞으로 (상한에 걸려 잘리지 않도록)
     cust.sort(key=lambda r: "met" not in r)
-    buckets = {"C": cust[:CUST_MAX], "X": comp[:COMP_MAX],
-               "T": topic[:TOPIC_MAX], "G": general[:GENERAL_MAX]}
+
+    # 같은 사건의 다른 매체 기사는 한 건만 (cluster_id로 못 묶인 경우 — 예: '퀸락' 허가 기사가
+    # 식약처·오노약품 주어로 따로 들어가 업계 뉴스에 두 번 나왔음). 고객사 > 경쟁사 > 주제 > 일반
+    # 순으로 먼저 고른 기사를 남기고, 칸마다 상한까지만 채운다 (LLM 토큰도 함께 절약)
+    from dedup import signature, is_same_event
+    kept_sigs, buckets = [], {}
+    for key, group, limit in (("C", cust, CUST_MAX), ("X", comp, COMP_MAX),
+                              ("T", topic, TOPIC_MAX), ("G", general, GENERAL_MAX)):
+        picked = []
+        for r in group:
+            if len(picked) >= limit:
+                break
+            sig = signature(r.get("title_ko") or r.get("title"))
+            if any(is_same_event(sig, k) for k in kept_sigs):
+                continue
+            kept_sigs.append(sig)
+            picked.append(r)
+        buckets[key] = picked
     return buckets, len(watchlist)
 
 
