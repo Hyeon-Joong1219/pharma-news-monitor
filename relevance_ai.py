@@ -21,6 +21,7 @@ Groq 무료 계정 키 발급:
 """
 
 import os
+import re
 import json
 import logging
 import time
@@ -237,7 +238,16 @@ def _classify_batch(client, articles: list) -> dict:
         # 추론 블록(<think>)·마크다운 코드블록·앞뒤 설명문 제거 (대체 모델은 JSON 앞에 문장을 붙이기도 함)
         raw = raw.split("</think>")[-1]
         start, end = raw.find("["), raw.rfind("]")
-        data = json.loads(raw[start:end + 1] if start >= 0 and end > start else raw)
+        try:
+            data = json.loads(raw[start:end + 1] if start >= 0 and end > start else raw)
+        except json.JSONDecodeError:
+            # gpt-oss가 마지막 항목을 '{"id":25,"score":10]}'처럼 괄호 순서를 틀리게 끝내는 일이 잦아
+            # 배치 전체(25건)가 버려지고 매 실행 재전송돼 일일 한도를 소진했음 (2026-10-21 확인).
+            # JSON이 깨져도 id·score 쌍은 온전하므로 정규식으로 건진다.
+            data = [{"id": i, "score": s} for i, s in
+                    re.findall(r'"id"\s*:\s*(\d+)\s*,\s*"score"\s*:\s*(\d+(?:\.\d+)?)', raw)]
+            if not data:
+                raise
         # LLM이 잘못된 id를 반환해도 배치 전체가 무효화되지 않도록 개별 검증
         result = {}
         for item in data:

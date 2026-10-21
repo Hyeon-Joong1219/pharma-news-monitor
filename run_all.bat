@@ -1,20 +1,9 @@
 @echo off
-chcp 65001 >nul
+REM Weekly local DB backup (Task Scheduler "PharmaNewsMonitor").
+REM News fetch runs on GitHub Actions (fetch.yml) every 3h - not here, to avoid doubling Groq usage.
+REM Keep this file ASCII + CRLF: UTF-8 Korean/LF made cmd misparse it (exit 255, nothing ran since 2026-07).
 cd /d "%~dp0"
-
-echo [%date% %time%] === 뉴스 수집 시작 ===
-
-REM 1. 뉴스 수집 + 스코어링
-call venv\Scripts\python.exe fetch.py
-
-REM 2. DB 백업 (주 1회 자동 — 6일 이내 백업 있으면 스킵)
-call venv\Scripts\python.exe scripts\backup_db.py
-
-REM 2. 언론사 관리 비활성화 (DB 비어있을 때 전체 삭제 방지)
-REM for /f %%d in ('powershell -command "(Get-Date).DayOfWeek"') do set DOW=%%d
-REM if "%DOW%"=="Monday" (
-REM     echo [%date% %time%] === 언론사 자동 관리 실행 ===
-REM     call venv\Scripts\python.exe source_manager.py
-REM )
-
-echo [%date% %time%] === 완료 ===
+set PYTHONIOENCODING=utf-8
+echo [%date% %time%] backup start >> run_all.log
+call venv\Scripts\python.exe scripts\backup_db.py >> run_all.log 2>&1
+echo [%date% %time%] done (exit %errorlevel%) >> run_all.log

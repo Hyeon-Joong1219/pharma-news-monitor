@@ -14,6 +14,7 @@ import sys
 import os
 import gzip
 import glob
+import io
 import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,6 +27,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+import psycopg2  # noqa: E402
 from db import get_db  # noqa: E402
 
 BACKUP_DIR   = os.path.join(ROOT, "backups")
@@ -53,6 +55,53 @@ def prune_old():
             print(f"  오래된 백업 삭제: {os.path.basename(old)}")
 
 
+CHUNK_ROWS = 5000   # articles는 id 순으로 이만큼씩 나눠 받음
+RETRIES    = 3
+ID_TABLES  = {"articles", "watchlist"}   # 정수 id가 있어 구간 분할 가능 (feed_health는 작아서 통째로)
+
+
+def _copy_chunked(table: str, f):
+    """테이블을 id 구간별 COPY로 나눠 받아 f(바이너리)에 이어 쓴다.
+    한 번에 COPY하면(약 100MB, 4~5분) 회사망에서 연결이 간헐적으로 끊겨
+    'PGRES_COPY_OUT ... no message from the libpq'로 실패했음 (2026-07 이후 백업 실패).
+    구간마다 새 연결로 받고, 끊기면 그 구간만 재시도한다."""
+    if table not in ID_TABLES:
+        conn = get_db()
+        try:
+            buf = io.BytesIO()
+            with conn.cursor() as cur:
+                cur.copy_expert(f"COPY {table} TO STDOUT WITH CSV HEADER", buf)
+            f.write(buf.getvalue())
+        finally:
+            conn.close()
+        return
+    last_id, first = 0, True
+    while True:
+        for attempt in range(1, RETRIES + 1):
+            buf = io.BytesIO()
+            conn = get_db()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"SELECT MAX(id) AS m FROM (SELECT id FROM {table} WHERE id > %s "
+                        f"ORDER BY id LIMIT %s) t", (last_id, CHUNK_ROWS))
+                    upto = cur.fetchone()["m"]
+                    if upto is None:
+                        return
+                    cur.copy_expert(
+                        f"COPY (SELECT * FROM {table} WHERE id > {int(last_id)} AND id <= {int(upto)} "
+                        f"ORDER BY id) TO STDOUT WITH CSV{' HEADER' if first else ''}", buf)
+                break
+            except psycopg2.Error:
+                if attempt == RETRIES:
+                    raise
+                print(f"  {table} id>{last_id} 구간 재시도 ({attempt}/{RETRIES})")
+            finally:
+                conn.close()
+        f.write(buf.getvalue())
+        last_id, first = upto, False
+
+
 def run(force: bool = False):
     os.makedirs(BACKUP_DIR, exist_ok=True)
 
@@ -62,19 +111,18 @@ def run(force: bool = False):
         return
 
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-    conn = get_db()
-    try:
-        for table in TABLES:
-            path = os.path.join(BACKUP_DIR, f"backup_{stamp}_{table}.csv.gz")
-            with gzip.open(path, "wt", encoding="utf-8", newline="") as f:
-                with conn.cursor() as cur:
-                    cur.copy_expert(
-                        f"COPY {table} TO STDOUT WITH CSV HEADER", f
-                    )
-            size_mb = os.path.getsize(path) / 1024 / 1024
-            print(f"  {table:<12} → {os.path.basename(path)} ({size_mb:.1f} MB)")
-    finally:
-        conn.close()
+    for table in TABLES:
+        path = os.path.join(BACKUP_DIR, f"backup_{stamp}_{table}.csv.gz")
+        try:
+            with gzip.open(path, "wb") as f:
+                _copy_chunked(table, f)
+        except Exception:
+            # 반쪽 파일이 남으면 '최근 백업 있음'으로 보여 6일간 백업을 건너뛰므로 삭제
+            if os.path.exists(path):
+                os.remove(path)
+            raise
+        size_mb = os.path.getsize(path) / 1024 / 1024
+        print(f"  {table:<12} → {os.path.basename(path)} ({size_mb:.1f} MB)")
 
     prune_old()
     print("백업 완료")
