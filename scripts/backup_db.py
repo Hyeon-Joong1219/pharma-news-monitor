@@ -64,9 +64,12 @@ def _copy_chunked(table: str, f):
     """테이블을 id 구간별 COPY로 나눠 받아 f(바이너리)에 이어 쓴다.
     한 번에 COPY하면(약 100MB, 4~5분) 회사망에서 연결이 간헐적으로 끊겨
     'PGRES_COPY_OUT ... no message from the libpq'로 실패했음 (2026-07 이후 백업 실패).
-    구간마다 새 연결로 받고, 끊기면 그 구간만 재시도한다."""
+    구간마다 새 연결로 받고, 끊기면 그 구간만 재시도한다.
+    연결은 autocommit — 트랜잭션 안에서 끊기면 Supavisor가 서버 세션을 'idle in transaction'으로
+    붙잡아 articles 잠금이 남고, fetch.py의 ALTER TABLE이 대기하다 시간 초과됨 (2026-10-21)."""
     if table not in ID_TABLES:
         conn = get_db()
+        conn.autocommit = True
         try:
             buf = io.BytesIO()
             with conn.cursor() as cur:
@@ -80,6 +83,7 @@ def _copy_chunked(table: str, f):
         for attempt in range(1, RETRIES + 1):
             buf = io.BytesIO()
             conn = get_db()
+            conn.autocommit = True
             try:
                 with conn.cursor() as cur:
                     cur.execute(
