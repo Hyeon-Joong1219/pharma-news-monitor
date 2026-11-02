@@ -7,6 +7,7 @@
 import yaml
 import re
 import logging
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from datetime import datetime, timedelta
 from db import get_db, execute_batch_update
@@ -148,37 +149,43 @@ def cluster_articles(articles: list, cfg: dict) -> dict:
         words |= significant_words(a.get("title_ko") or "", min_len_ko)
         meta[a["id"]] = {"time": t, "words": words, "source": a["source"]}
 
-    # 단어 역색인
-    word_idx: dict[str, set] = defaultdict(set)
-    for aid, m in meta.items():
-        for w in m["words"]:
-            word_idx[w].add(aid)
+    # 시간순 정렬 + 단어 역색인(정렬 위치 목록)
+    # 과거에는 비교한 모든 쌍을 checked 집합에 저장하고 30일치 전체를 후보로 모아
+    # "제약·임상" 같은 흔한 단어 때문에 쌍이 기사 수의 제곱으로 불어났다
+    # (2.6만 건 기준 751MB·8분 → Render 512MB 메모리 한도 초과).
+    # 이제 각 기사는 자기보다 뒤이면서 시간창 안에 있는 기사만 보므로
+    # 쌍마다 정확히 한 번만 검사되고, 별도 checked 집합이 필요 없다.
+    order = sorted(meta, key=lambda aid: (meta[aid]["time"], aid))
+    times = [meta[aid]["time"] for aid in order]
+    window = timedelta(seconds=window_sec)
+    word_idx: dict[str, list] = defaultdict(list)
+    for p, aid in enumerate(order):
+        for w in meta[aid]["words"]:
+            word_idx[w].append(p)          # p 오름차순으로 쌓임
 
     uf = UnionFind(meta.keys())
-    checked: set = set()
 
-    for aid, m in meta.items():
-        # 이 기사와 최소 1개 단어를 공유하는 후보 수집
-        candidates: set = set()
+    for p, aid in enumerate(order):
+        m = meta[aid]
+        hi = bisect_right(times, m["time"] + window)   # 시간창 끝(미포함)
+        # 후보별 공유 단어 수 = 이 기사 단어 목록에 함께 등장한 횟수
+        shared_cnt: dict[int, int] = defaultdict(int)
         for w in m["words"]:
-            candidates |= word_idx[w]
-        candidates.discard(aid)
+            lst = word_idx[w]
+            for q in lst[bisect_right(lst, p):bisect_left(lst, hi)]:
+                shared_cnt[q] += 1
 
-        for cid in candidates:
-            pair = (min(aid, cid), max(aid, cid))
-            if pair in checked:
+        for q in sorted(shared_cnt):
+            shared = shared_cnt[q]
+            if shared < min_shared:
                 continue
-            checked.add(pair)
-
+            cid = order[q]
             cm = meta[cid]
             if m["source"] == cm["source"]:       # 같은 매체는 클러스터 제외
                 continue
-            if abs((m["time"] - cm["time"]).total_seconds()) > window_sec:
-                continue
-            shared = len(m["words"] & cm["words"])
             # 공유 단어 수 + 비율(짧은 쪽 대비) 둘 다 만족해야 클러스터
             shorter = min(len(m["words"]), len(cm["words"]))
-            if shorter > 0 and shared >= min_shared and shared / shorter >= min_ratio:
+            if shorter > 0 and shared / shorter >= min_ratio:
                 # 안전장치: 단어 매칭이 느슨해 잘못 체이닝되더라도
                 # 클러스터가 무한정 커지지 않도록 크기 상한을 둠
                 if uf.cluster_size(aid) + uf.cluster_size(cid) > max_cluster:
